@@ -54,3 +54,4 @@ $string['selectassessor'] = 'Select assessor';
 $string['apply'] = 'Apply';
 $string['notification_assessorassigned'] = 'Assessor assigned successfully.';
 $string['notification_assessorerror'] = 'Error assigning assessor.';
+$string['normcontrol_role'] = 'Normcontrol';
