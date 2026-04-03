@@ -1,0 +1,11 @@
+/* Красим кнопку сброса в цвета btn-danger */
+#id_resetbtn {
+  background-color: #dc3545;
+  border-color: #dc3545;
+}
+
+#id_resetbtn:hover {
+  color: #fff;
+  background-color: #bb2d3b;
+  border-color: #bb2d3b;
+}
