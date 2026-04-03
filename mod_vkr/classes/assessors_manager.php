@@ -143,8 +143,12 @@ class assessors_manager {
             return null;
         }
 
+        // groups_get_members возвращает массив объектов пользователей
         // Берем первого студента для определения оценщика группы
         $firststudent = reset($students);
+        if (!is_object($firststudent) || !isset($firststudent->id)) {
+            return null;
+        }
         return self::get_assessor_for_student($courseid, $firststudent->id);
     }
 
