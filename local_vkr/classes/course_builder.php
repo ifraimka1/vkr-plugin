@@ -259,7 +259,7 @@ class course_builder {
         return $DB->get_field(
             'course_sections',
             'section',
-            ['course' => $courseid, 'name' => self::$defaultsections[1]['name']]
+            ['course' => $courseid, 'name' => self::$defaultsections[0]['name']]
         );
     }
 
