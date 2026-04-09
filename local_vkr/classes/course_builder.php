@@ -46,27 +46,81 @@ class course_builder {
     ];
 
     private static array $defaultmodules = [
-        "review" => [
+        "adviser" => [
             'name' => 'Отзыв руководителя',
             'dependencies' => [],
         ],
+        "commitment" => [
+            'name' => 'Обязательство (заявление) на размещение ВКР в ЭБС ЮФУ',
+            'dependencies' => ['adviser'],
+        ],
         "normcontrol" => [
             'name' => 'Нормоконтроль',
-            'dependencies' => ['review'],
+            'dependencies' => ['adviser'],
+        ],
+        "review" => [
+            'name' => 'Рецензент',
+            'dependencies' => ['adviser'],
+        ],
+        "placement" => [
+            'name' => 'Размещение ВКР в электронно-библиотечной системе ЮФУ',
+            'dependencies' => ['adviser'],
         ],
         "pass" => [
             'name' => 'Допуск',
-            'dependencies' => ['review', 'normcontrol'],
+            'dependencies' => ['adviser', 'commitment', 'normcontrol', 'review', 'placement'],
         ],
     ];
 
-    public static function prepare_course($courseid, $duedate): void {
+    public static function get_default_modules(): array {
+        return self::$defaultmodules;
+    }
+
+    public static function get_selected_module_keys($courseid): array {
+        if (self::need_to_prepare($courseid) !== false) {
+            return array_keys(self::$defaultmodules);
+        }
+
+        return array_keys(self::get_existing_auto_modules($courseid));
+    }
+
+    public static function prepare_course($courseid, $duedate, ?array $selectedmodulekeys = null): void {
         $sectionnumber = self::need_to_prepare($courseid);
         if ($sectionnumber === false) {return;}
 
         self::set_course_name($courseid);
         self::create_sections($courseid, $sectionnumber);
-        self::create_modules($courseid, ++$sectionnumber, $duedate);
+        self::create_modules($courseid, ++$sectionnumber, $duedate, $selectedmodulekeys);
+    }
+
+    public static function update_course($courseid, $duedate, array $selectedmodulekeys): void {
+        $sectionnumber = self::get_modules_section_number($courseid);
+        if ($sectionnumber === false) {return;}
+
+        $existingmodules = self::get_existing_auto_modules($courseid);
+        $selectedmodules = array_intersect_key(self::$defaultmodules, array_flip($selectedmodulekeys));
+
+        foreach (self::$defaultmodules as $modulekey => $module) {
+            $existingitems = $existingmodules[$modulekey] ?? [];
+            $shouldexist = array_key_exists($modulekey, $selectedmodules);
+
+            if ($shouldexist) {
+                if (empty($existingitems)) {
+                    self::create_module($courseid, $sectionnumber, $duedate, $module);
+                    continue;
+                }
+
+                for ($i = 1; $i < count($existingitems); $i++) {
+                    course_delete_module($existingitems[$i]->cmid);
+                }
+            } else {
+                foreach ($existingitems as $existingitem) {
+                    course_delete_module($existingitem->cmid);
+                }
+            }
+        }
+
+        rebuild_course_cache($courseid, true);
     }
 
     public static function reset_course($courseid): void {
@@ -89,7 +143,6 @@ class course_builder {
 
         $sections = $DB->get_records('course_sections', ['course' => $courseid]);
 
-        // TODO: сделать названия секций переменными.
         foreach ($sections as $section) {
             if ($section->name === self::$defaultsections[0]['name']) {
                 return false;
@@ -142,53 +195,115 @@ class course_builder {
         rebuild_course_cache($courseid, true);
     }
 
-    private static function create_modules($courseid, $sectionnumber, $duedate): void {
+    private static function create_modules($courseid, $sectionnumber, $duedate, ?array $selectedmodulekeys = null): void {
+        $modules = self::$defaultmodules;
+        if ($selectedmodulekeys !== null) {
+            $modules = array_intersect_key($modules, array_flip($selectedmodulekeys));
+        }
+
+        foreach ($modules as $mod) {
+            self::create_module($courseid, $sectionnumber, $duedate, $mod);
+        }
+    }
+
+    private static function create_module($courseid, $sectionnumber, $duedate, array $mod): void {
         global $CFG;
         require_once($CFG->dirroot.'/mod/assign/lib.php');
         require_once($CFG->dirroot.'/mod/assign/locallib.php');
 
-        foreach (self::$defaultmodules as $mod) {
-            $createdmodinfo = (object)[
-                'modulename' => 'assign',
-                'section' => $sectionnumber,
-                'course' => $courseid,
-                'name' => $mod['name'],
-                'introeditor' => [
-                    'text' => 'Загрузите окончательную версию ВКР и отзыв руководителя',
-                    'format' => FORMAT_HTML,
-                ],
-                'alwaysshowdescription' => 1,
-                'submissiondrafts' => 0,
-                'requiresubmissionstatement' => 0,
-                'sendnotifications' => 0,
-                'allowsubmissionsfromdate' => 0,
-                'sendlatenotifications' => 0,
-                'duedate' => $duedate,
-                'cutoffdate' => 0,
-                'grade' => 100,
-                'gradingduedate' => 0,
-                'teamsubmission' => 0,
-                'requireallteammemberssubmit' => 0,
-                'teamsubmissiongroupingid' => 0,
-                'blindmarking' => 0,
-                'hidegrader' => 0,
-                'attemptreopenmethod' => 'none',
-                'maxattempts' => -1,
-                'markingworkflow' => 1, // Включить поэтапное оценивание
-                'markingallocation' => 1, // Включить назначенных оценщиков
-                'assignfeedback_comments_enabled' => 1,
-                'visible' => 1,
-                'cmidnumber' => '',
-                'availability' => null,
-                'assignsubmission_file_enabled' => 1,
-                'assignsubmission_file_maxfiles' => 20,
-                'assignsubmission_file_maxsizebytes' => 5242880,
-            ];
-            $createdmodinfo = create_module($createdmodinfo);
+        $createdmodinfo = (object)[
+            'modulename' => 'assign',
+            'section' => $sectionnumber,
+            'course' => $courseid,
+            'name' => $mod['name'],
+            'introeditor' => [
+                'text' => 'Загрузите окончательную версию ВКР и отзыв руководителя',
+                'format' => FORMAT_HTML,
+            ],
+            'alwaysshowdescription' => 1,
+            'submissiondrafts' => 0,
+            'requiresubmissionstatement' => 0,
+            'sendnotifications' => 0,
+            'allowsubmissionsfromdate' => 0,
+            'sendlatenotifications' => 0,
+            'duedate' => $duedate,
+            'cutoffdate' => 0,
+            'grade' => 100,
+            'gradingduedate' => 0,
+            'teamsubmission' => 0,
+            'requireallteammemberssubmit' => 0,
+            'teamsubmissiongroupingid' => 0,
+            'blindmarking' => 0,
+            'hidegrader' => 0,
+            'attemptreopenmethod' => 'none',
+            'maxattempts' => -1,
+            'markingworkflow' => 1,
+            'markingallocation' => 1,
+            'assignfeedback_comments_enabled' => 1,
+            'visible' => 1,
+            'cmidnumber' => '',
+            'availability' => null,
+            'assignsubmission_file_enabled' => 1,
+            'assignsubmission_file_maxfiles' => 20,
+            'assignsubmission_file_maxsizebytes' => 5242880,
+        ];
+        $createdmodinfo = create_module($createdmodinfo);
 
-            self::protect_cm($createdmodinfo->coursemodule);
-            self::set_cm_idnumber($createdmodinfo->coursemodule);
+        self::protect_cm($createdmodinfo->coursemodule);
+        self::set_cm_idnumber($createdmodinfo->coursemodule);
+    }
+
+    private static function get_modules_section_number($courseid): int|bool {
+        global $DB;
+
+        return $DB->get_field(
+            'course_sections',
+            'section',
+            ['course' => $courseid, 'name' => self::$defaultsections[1]['name']]
+        );
+    }
+
+    private static function get_existing_auto_modules($courseid): array {
+        global $DB;
+
+        $sql = "SELECT cm.id AS cmid, a.name
+                  FROM {course_modules} cm
+                  JOIN {modules} m ON m.id = cm.module
+                  JOIN {assign} a ON a.id = cm.instance
+                 WHERE cm.course = :courseid
+                   AND cm.idnumber = :idnumber
+                   AND m.name = :modname";
+        $records = $DB->get_records_sql($sql, [
+            'courseid' => $courseid,
+            'idnumber' => 'vkr_auto',
+            'modname' => 'assign',
+        ]);
+
+        $modulesbykey = [];
+        foreach ($records as $record) {
+            $modulekey = self::get_module_key_by_name($record->name);
+            if ($modulekey === null) {
+                continue;
+            }
+
+            if (!array_key_exists($modulekey, $modulesbykey)) {
+                $modulesbykey[$modulekey] = [];
+            }
+
+            $modulesbykey[$modulekey][] = $record;
         }
+
+        return $modulesbykey;
+    }
+
+    private static function get_module_key_by_name(string $modulename): ?string {
+        foreach (self::$defaultmodules as $modulekey => $module) {
+            if ($module['name'] === $modulename) {
+                return $modulekey;
+            }
+        }
+
+        return null;
     }
 
     private static function protect_cm($cmid) {

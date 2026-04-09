@@ -43,7 +43,9 @@ $string['prepare_course_help'] = 'Initialize course: create sections and default
 $string['notification_courseprepared'] = 'Course prepared successfully';
 $string['prepared_course_help'] = 'Course already prepared';
 $string['reset_course'] = 'Reset course';
+$string['update_course'] = 'Update course';
 $string['notification_coursereset'] = 'Course reset successfully';
+$string['notification_courseupdated'] = 'Course updated successfully';
 $string['duedate'] = 'Deadline for assignments';
 
 //assessors
@@ -54,3 +56,4 @@ $string['selectassessor'] = 'Select assessor';
 $string['apply'] = 'Apply';
 $string['notification_assessorassigned'] = 'Assessor assigned successfully.';
 $string['notification_assessorerror'] = 'Error assigning assessor.';
+$string['taskstogenerate'] = 'Assignments to create';
