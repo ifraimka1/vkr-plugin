@@ -61,15 +61,18 @@ $tabs = [
 
 switch ($tab) {
     case 'assessors':
-        $formdata = [
-            'cmid' => $cm->id,
-        ];
-        $form = new \mod_vkr\form\assessors_form(null, $formdata);
-        if ($data = $form->get_data()) {
+        if (optional_param('saveassessors', 0, PARAM_BOOL) && confirm_sesskey()) {
             $success = true;
-            $groups = groups_get_all_groups($course->id);
+            $groups = groups_get_all_groups($course->id, 0, 0, 'g.*', 'name ASC');
             foreach ($groups as $group) {
-                $assessorid = $data->{'assessorid_' . $group->id};
+                $fieldname = 'assessorid_' . $group->id;
+                $assessorid = optional_param($fieldname, 0, PARAM_INT);
+                error_log('[mod_vkr][assessors] Received form value ' . json_encode([
+                    'courseid' => (int)$course->id,
+                    'groupid' => (int)$group->id,
+                    'fieldname' => $fieldname,
+                    'assessorid' => $assessorid,
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
                 if ($assessorid == 0) {
                     $assessorid = null;
                 }
@@ -115,7 +118,7 @@ echo $OUTPUT->tabtree($tabs, $tab);
 
 switch ($tab) {
     case 'assessors':
-        $form->display();
+        echo \mod_vkr\assessors_manager::render_assessors_form($cm->id, $course->id);
         break;
 
     default:
