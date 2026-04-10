@@ -26,7 +26,7 @@ defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'mod_vkr';
 $plugin->release = '0.1.0';
-$plugin->version = 2026041000;
+$plugin->version = 2026041002;
 $plugin->requires = 2022112800;
 $plugin->maturity = MATURITY_ALPHA;
 $plugin->dependencies = [
