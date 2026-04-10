@@ -92,21 +92,33 @@ switch ($tab) {
         break;
 
     default:
+        $availablemodules = \local_vkr\course_builder::get_default_modules();
+        $selectedmodules = \local_vkr\course_builder::get_selected_module_keys($course->id);
         $formdata = [
             'cmid' => $cm->id,
             'needtoprepare' => (bool)\local_vkr\course_builder::need_to_prepare($course->id),
+            'availablemodules' => $availablemodules,
+            'selectedmodules' => $selectedmodules,
         ];
         $form = new \mod_vkr\form\main_form(null, $formdata);
         if ($data = $form->get_data()) {
-            switch ($data->action) {
-                case 'prepare':
-                    \local_vkr\course_builder::prepare_course($course->id, $data->duedate);
-                    \core\notification::success(get_string('notification_courseprepared', 'mod_vkr'));
-                    break;
-                case 'reset':
-                    \local_vkr\course_builder::reset_course($course->id);
-                    \core\notification::success(get_string('notification_coursereset', 'mod_vkr'));
-                    break;
+            $selectedmodulekeys = [];
+            foreach (array_keys($availablemodules) as $modulekey) {
+                $fieldname = 'module_' . $modulekey;
+                if (!empty($data->{$fieldname})) {
+                    $selectedmodulekeys[] = $modulekey;
+                }
+            }
+
+            if (!empty($data->preparebtn)) {
+                \local_vkr\course_builder::prepare_course($course->id, $data->duedate, $selectedmodulekeys);
+                \core\notification::success(get_string('notification_courseprepared', 'mod_vkr'));
+            } else if (!empty($data->updatebtn)) {
+                \local_vkr\course_builder::update_course($course->id, $data->duedate, $selectedmodulekeys);
+                \core\notification::success(get_string('notification_courseupdated', 'mod_vkr'));
+            } else if (!empty($data->resetbtn)) {
+                \local_vkr\course_builder::reset_course($course->id);
+                \core\notification::success(get_string('notification_coursereset', 'mod_vkr'));
             }
             redirect(new moodle_url('/mod/vkr/view.php', ['id' => $cm->id]));
         }

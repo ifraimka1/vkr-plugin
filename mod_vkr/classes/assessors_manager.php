@@ -258,6 +258,7 @@ class assessors_manager {
 
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
+        $cmidnumber = \local_vkr\course_builder::get_module_idnumber('normcontrol');
         $record = $DB->get_record_sql(
             "SELECT a.id, cm.id AS cmid
                FROM {course_modules} cm
@@ -265,11 +266,11 @@ class assessors_manager {
                JOIN {assign} a ON a.id = cm.instance
               WHERE cm.course = :courseid
                 AND m.name = :modname
-                AND a.name = :assignname",
+                AND cm.idnumber = :cmidnumber",
             [
                 'courseid' => $courseid,
                 'modname' => 'assign',
-                'assignname' => 'Нормоконтроль',
+                'cmidnumber' => $cmidnumber,
             ]
         );
 

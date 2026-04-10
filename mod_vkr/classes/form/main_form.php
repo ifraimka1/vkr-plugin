@@ -35,16 +35,14 @@ class main_form extends moodleform {
         $customdata = $this->_customdata;
 
         $needtoprepare = $customdata['needtoprepare'];
+        $availablemodules = $customdata['availablemodules'] ?? [];
+        $selectedmodules = $customdata['selectedmodules'] ?? [];
 
         $mform->addElement('hidden', 'id', $customdata['cmid']);
         $mform->setType('id', PARAM_INT);
 
         $mform->addElement('hidden', 'sesskey', sesskey());
         $mform->setType('id', PARAM_RAW);
-
-        $actionvalue = $needtoprepare ? 'prepare' : 'reset';
-        $mform->addElement('hidden', 'action', $actionvalue);
-        $mform->setType('action', PARAM_ALPHA);
 
         $mform->addElement(
             'date_selector',
@@ -54,14 +52,23 @@ class main_form extends moodleform {
         );
         $mform->setDefault('duedate', time());
 
+        foreach ($availablemodules as $modulekey => $module) {
+            $fieldname = 'module_' . $modulekey;
+            $mform->addElement('advcheckbox', $fieldname, '', $module['name']);
+            $mform->setDefault($fieldname, in_array($modulekey, $selectedmodules, true) ? 1 : 0);
+        }
+
         if ($customdata['needtoprepare']) {
-            $this->add_action_buttons(false, get_string('prepare_course', 'mod_vkr'));
-        } else {
             $mform->addElement(
                 'submit',
-                'resetbtn',
-                get_string('reset_course', 'mod_vkr')
+                'preparebtn',
+                get_string('prepare_course', 'mod_vkr')
             );
+        } else {
+            $buttonarray = [];
+            $buttonarray[] = $mform->createElement('submit', 'updatebtn', get_string('update_course', 'mod_vkr'));
+            $buttonarray[] = $mform->createElement('submit', 'resetbtn', get_string('reset_course', 'mod_vkr'));
+            $mform->addGroup($buttonarray, 'courseactions', '', [' '], false);
         }
     }
 }

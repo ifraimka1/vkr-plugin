@@ -28,6 +28,8 @@ namespace local_vkr;
  * Event observers class
  */
 class observer {
+    private const AUTO_IDNUMBER_PREFIX = 'vkr_';
+
     /**
      * Prevent deletion of auto-generated course modules
      *
@@ -40,7 +42,7 @@ class observer {
         $cmid = $event->objectid;
         $cm = $DB->get_record('course_modules', ['id' => $cmid]);
 
-        if ($cm && $cm->idnumber === 'vkr_auto') {
+        if ($cm && property_exists($cm, 'idnumber') && self::is_vkr_idnumber((string)$cm->idnumber)) {
             throw new \moodle_exception('cannotdeletemodule', 'local_vkr');
         }
     }
@@ -57,8 +59,19 @@ class observer {
         $sectionid = $event->objectid;
         $section = $DB->get_record('course_sections', ['id' => $sectionid]);
 
-        if ($section && $section->idnumber === 'vkr_auto') {
+        if ($section && property_exists($section, 'idnumber') &&
+                self::is_vkr_idnumber((string)$section->idnumber)) {
             throw new \moodle_exception('cannotdeletesection', 'local_vkr');
         }
+    }
+
+    /**
+     * Check whether idnumber belongs to auto-generated VKR entities.
+     *
+     * @param string $idnumber
+     * @return bool
+     */
+    private static function is_vkr_idnumber(string $idnumber): bool {
+        return strpos($idnumber, self::AUTO_IDNUMBER_PREFIX) === 0;
     }
 }
