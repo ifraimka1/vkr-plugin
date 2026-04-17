@@ -27,6 +27,7 @@ namespace local_vkr;
 class course_builder {
     private const AUTO_IDNUMBER_PREFIX = 'vkr_';
     private const MODULE_IDNUMBER_PREFIX = 'vkr_mod_';
+    private const GEK_MEMBER_MODULE_IDNUMBER_PREFIX = 'vkr_gekmember_';
 
     private static array $defaultsections = [
         [
@@ -109,6 +110,7 @@ class course_builder {
         self::set_course_name($courseid, $speciality, $courseyear);
         self::create_sections($courseid, $sectionnumber);
         self::create_modules($courseid, ++$sectionnumber, $duedate, $selectedmodulekeys);
+        self::sync_gek_member_modules($courseid);
     }
 
     public static function get_training_direction_options(): array {
@@ -439,6 +441,180 @@ class course_builder {
 
     private static function get_section_idnumber(string $sectionkey): string {
         return self::AUTO_IDNUMBER_PREFIX . 'section_' . $sectionkey;
+    }
+
+    public static function create_or_update_gek_member_module(
+        int $courseid,
+        \stdClass $user
+    ): void {
+        global $CFG, $DB;
+
+        if (!self::is_prepared($courseid)) {
+            return;
+        }
+
+        require_once($CFG->dirroot . '/mod/assign/lib.php');
+        require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
+        $sectionnumber = self::get_modules_section_number($courseid);
+        if ($sectionnumber === false) {
+            return;
+        }
+        $sectionnumber += 1;
+
+        $idnumber = self::get_gek_member_module_idnumber((int)$user->id);
+        $name = self::get_gek_member_module_name($user);
+
+        $existingcm = self::get_existing_gek_member_module($courseid, (int)$user->id);
+
+        if ($existingcm) {
+            $assign = $DB->get_record('assign', ['id' => $existingcm->instance], '*', MUST_EXIST);
+
+            $data = (object)[
+                'coursemodule' => $existingcm->id,
+                'course' => $courseid,
+                'modulename' => 'assign',
+                'instance' => $assign->id,
+                'name' => $name,
+                'duedate' => 0,
+            ];
+
+            update_moduleinfo($existingcm, $data, $courseid);
+            return;
+        }
+
+        $createdmodinfo = (object)[
+            'modulename' => 'assign',
+            'section' => $sectionnumber,
+            'course' => $courseid,
+            'name' => $name,
+            'introeditor' => [
+                'text' => '',
+                'format' => FORMAT_HTML,
+            ],
+            'alwaysshowdescription' => 1,
+            'submissiondrafts' => 0,
+            'requiresubmissionstatement' => 0,
+            'sendnotifications' => 0,
+            'allowsubmissionsfromdate' => 0,
+            'sendlatenotifications' => 0,
+            'duedate' => 0,
+            'cutoffdate' => 0,
+            'grade' => 100,
+            'gradingduedate' => 0,
+            'teamsubmission' => 0,
+            'requireallteammemberssubmit' => 0,
+            'teamsubmissiongroupingid' => 0,
+            'blindmarking' => 0,
+            'hidegrader' => 0,
+            'attemptreopenmethod' => 'none',
+            'maxattempts' => -1,
+            'markingworkflow' => 1,
+            'markingallocation' => 1,
+            'assignfeedback_comments_enabled' => 1,
+            'visible' => 1,
+            'cmidnumber' => $idnumber,
+            'assignsubmission_file_enabled' => 1,
+            'assignsubmission_file_maxfiles' => 20,
+            'assignsubmission_file_maxsizebytes' => 5242880,
+        ];
+
+        $created = create_module($createdmodinfo);
+        self::protect_cm($created->coursemodule);
+    }
+
+    public static function sync_gek_member_modules(int $courseid): void {
+        global $DB;
+
+        if (!self::is_prepared($courseid)) {
+            return;
+        }
+
+        $role = $DB->get_record('role', ['shortname' => 'gekmember'], 'id', IGNORE_MISSING);
+        if (!$role) {
+            return;
+        }
+
+        $context = \context_course::instance($courseid);
+
+        $users = get_role_users($role->id, $context, false, 'u.id, u.firstname, u.lastname');
+        $existing = self::get_existing_gek_member_modules($courseid);
+
+        $actualuserids = [];
+        foreach ($users as $user) {
+            $actualuserids[] = (int)$user->id;
+            self::create_or_update_gek_member_module($courseid, $user);
+        }
+
+        foreach ($existing as $userid => $cm) {
+            if (!in_array((int)$userid, $actualuserids, true)) {
+                course_delete_module($cm->id);
+            }
+        }
+
+        rebuild_course_cache($courseid, true);
+    }
+
+    public static function delete_gek_member_module(int $courseid, int $userid): void {
+        $cm = self::get_existing_gek_member_module($courseid, $userid);
+        if ($cm) {
+            course_delete_module($cm->id);
+            rebuild_course_cache($courseid, true);
+        }
+    }
+
+    private static function get_existing_gek_member_module(int $courseid, int $userid): ?\stdClass {
+        global $DB;
+
+        $sql = "SELECT cm.*, cs.course
+              FROM {course_modules} cm
+              JOIN {course_sections} cs ON cs.id = cm.section
+              JOIN {modules} m ON m.id = cm.module
+             WHERE cs.course = :courseid
+               AND m.name = :modname
+               AND cm.idnumber = :idnumber";
+
+        return $DB->get_record_sql($sql, [
+            'courseid' => $courseid,
+            'modname' => 'assign',
+            'idnumber' => self::get_gek_member_module_idnumber($userid),
+        ]) ?: null;
+    }
+
+    private static function get_existing_gek_member_modules(int $courseid): array {
+        global $DB;
+
+        $sql = "SELECT cm.id, cm.idnumber
+              FROM {course_modules} cm
+              JOIN {course_sections} cs ON cs.id = cm.section
+              JOIN {modules} m ON m.id = cm.module
+             WHERE cs.course = :courseid
+               AND m.name = :modname
+               AND " . $DB->sql_like('cm.idnumber', ':prefix');
+
+        $records = $DB->get_records_sql($sql, [
+            'courseid' => $courseid,
+            'modname' => 'assign',
+            'prefix' => self::GEK_MEMBER_MODULE_IDNUMBER_PREFIX . '%',
+        ]);
+
+        $result = [];
+        foreach ($records as $record) {
+            $userid = (int)substr($record->idnumber, strlen(self::GEK_MEMBER_MODULE_IDNUMBER_PREFIX));
+            $result[$userid] = $record;
+        }
+
+        return $result;
+    }
+
+    private static function get_gek_member_module_idnumber(int $userid): string {
+        return self::GEK_MEMBER_MODULE_IDNUMBER_PREFIX . $userid;
+    }
+
+    private static function get_gek_member_module_name(\stdClass $user): string {
+        $lastname = trim($user->lastname ?? '');
+        $firstname = trim($user->firstname ?? '');
+        return "Член ГЭК - {$lastname} {$firstname}";
     }
 
     private static function is_prepared(int $courseid): bool {

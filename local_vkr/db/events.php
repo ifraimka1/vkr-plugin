@@ -33,4 +33,12 @@ $observers = [
         'eventname' => '\core\event\section_deleting',
         'callback'  => '\local_vkr\observer::section_deleting',
     ],
+    [
+        'eventname' => '\core\event\role_assigned',
+        'callback' => '\local_vkr\observer::role_assigned',
+    ],
+    [
+        'eventname' => '\core\event\role_unassigned',
+        'callback' => '\local_vkr\observer::role_unassigned',
+    ],
 ];
