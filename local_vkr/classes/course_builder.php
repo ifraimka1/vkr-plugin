@@ -93,21 +93,96 @@ class course_builder {
         return array_keys(self::get_existing_auto_modules($courseid));
     }
 
-    public static function prepare_course($courseid, $duedate, ?array $selectedmodulekeys = null): void {
+    public static function prepare_course(
+        int $courseid,
+        int $duedate,
+        string $speciality,
+        int $courseyear,
+        ?array $selectedmodulekeys = null
+    ): void {
         $sectionnumber = self::need_to_prepare($courseid);
         if ($sectionnumber === false) {
             return;
         }
 
-        self::set_course_name($courseid);
+        self::set_course_name($courseid, $speciality, $courseyear);
         self::create_sections($courseid, $sectionnumber);
         self::create_modules($courseid, ++$sectionnumber, $duedate, $selectedmodulekeys);
     }
 
-    public static function update_course($courseid, $duedate, array $selectedmodulekeys): void {
+    public static function get_training_direction_options(): array {
+        $rawvalue = (string)get_config('local_vkr', 'specialitys');
+        if ($rawvalue === '') {
+            return [];
+        }
+
+        $lines = preg_split('/\R/u', $rawvalue) ?: [];
+        $options = [];
+        foreach ($lines as $line) {
+            $direction = trim($line);
+            if ($direction === '') {
+                continue;
+            }
+            $options[$direction] = $direction;
+        }
+
+        return $options;
+    }
+
+    public static function get_year_options(): array {
+        $currentyear = (int)date('Y');
+        $options = [];
+        for ($i = 0; $i < 4; $i++) {
+            $year = (string)($currentyear + $i);
+            $options[$year] = $year;
+        }
+
+        return $options;
+    }
+
+    public static function get_selected_course_name_config(int $courseid): array {
+        global $DB;
+
+        $result = [
+            'speciality' => '',
+            'courseyear' => (int)date('Y'),
+        ];
+
+        $course = $DB->get_record('course', ['id' => $courseid], 'fullname', IGNORE_MISSING);
+        if (!$course || empty($course->fullname)) {
+            return $result;
+        }
+
+        $fullname = trim($course->fullname);
+        $patterns = [
+            '/^ГЭК\s*-\s*(.+)\s+(\d{4})$/u',
+            '/^ГЭК\s+(.+)\s-\s(\d{4})$/u',
+        ];
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $fullname, $matches)) {
+                $result['speciality'] = trim($matches[1]);
+                $result['courseyear'] = (int)$matches[2];
+                return $result;
+            }
+        }
+
+        return $result;
+    }
+
+    public static function update_course(
+        $courseid,
+        $duedate,
+        array $selectedmodulekeys,
+        ?string $speciality = null,
+        ?int $courseyear = null
+    ): void {
         $sectionnumber = self::get_modules_section_number($courseid);
         if ($sectionnumber === false) {
             return;
+        }
+
+        if ($speciality !== null && $courseyear !== null) {
+            self::set_course_name((int)$courseid, $speciality, (int)$courseyear);
         }
 
         $existingmodules = self::get_existing_auto_modules($courseid);
@@ -174,13 +249,16 @@ class course_builder {
         return count($sections);
     }
 
-    private static function set_course_name($courseid): void {
+    private static function set_course_name(int $courseid, string $speciality, int $courseyear): void {
         global $DB;
 
         $updatedcourse = new \stdClass();
         $updatedcourse->id = $courseid;
-        $updatedcourse->fullname = "ГЭК - 09.03.02 Информационные системы и технологии 2025";
-        $updatedcourse->shortname = "ГЭК 09.03.02 2025"; // TODO: сделать название курса переменной.
+        $speciality = trim($speciality);
+        $courseyear = (int)$courseyear;
+        $coursename = "ГЭК - {$speciality} {$courseyear}";
+        $updatedcourse->fullname = $coursename;
+        $updatedcourse->shortname = $coursename;
 
         $currentcourse = $DB->get_record('course', ['id' => $courseid]);
         if ($currentcourse->shortname === $updatedcourse->shortname) {

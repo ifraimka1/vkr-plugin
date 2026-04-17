@@ -28,3 +28,5 @@ defined('MOODLE_INTERNAL') || die();
 $string['pluginname'] = 'Защита ВКР';
 $string['cannotdeletemodule'] = 'Auto-generated module cannot be deleted';
 $string['cannotdeletesection'] = 'Auto-generated section cannot be deleted';
+$string['specialitys'] = 'Training directions';
+$string['specialitys_desc'] = 'One direction per line. These values are shown in the VKR course preparation form.';

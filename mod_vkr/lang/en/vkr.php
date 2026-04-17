@@ -47,6 +47,11 @@ $string['update_course'] = 'Update course';
 $string['notification_coursereset'] = 'Course reset successfully';
 $string['notification_courseupdated'] = 'Course updated successfully';
 $string['duedate'] = 'Deadline for assignments';
+$string['speciality'] = 'Training direction';
+$string['courseyear'] = 'Year';
+$string['select_option'] = 'Select...';
+$string['error_speciality'] = 'Select a training direction';
+$string['error_courseyear'] = 'Select a year';
 
 //assessors
 $string['assessors'] = 'Assessors';

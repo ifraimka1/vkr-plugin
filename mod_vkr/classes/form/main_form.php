@@ -37,6 +37,10 @@ class main_form extends moodleform {
         $needtoprepare = $customdata['needtoprepare'];
         $availablemodules = $customdata['availablemodules'] ?? [];
         $selectedmodules = $customdata['selectedmodules'] ?? [];
+        $specialityoptions = $customdata['specialityoptions'] ?? [];
+        $yearoptions = $customdata['yearoptions'] ?? [];
+        $selectedspeciality = $customdata['selectedspeciality'] ?? '';
+        $selectedcourseyear = (int)($customdata['selectedcourseyear'] ?? date('Y'));
 
         $mform->addElement('hidden', 'id', $customdata['cmid']);
         $mform->setType('id', PARAM_INT);
@@ -51,6 +55,24 @@ class main_form extends moodleform {
             ['optional' => false]
         );
         $mform->setDefault('duedate', time());
+
+        $mform->addElement(
+            'select',
+            'speciality',
+            get_string('speciality', 'mod_vkr'),
+            ['' => get_string('select_option', 'mod_vkr')] + $specialityoptions
+        );
+        $mform->setType('speciality', PARAM_TEXT);
+        $mform->setDefault('speciality', $selectedspeciality);
+
+        $mform->addElement(
+            'select',
+            'courseyear',
+            get_string('courseyear', 'mod_vkr'),
+            ['' => get_string('select_option', 'mod_vkr')] + $yearoptions
+        );
+        $mform->setType('courseyear', PARAM_INT);
+        $mform->setDefault('courseyear', $selectedcourseyear);
 
         foreach ($availablemodules as $modulekey => $module) {
             $fieldname = 'module_' . $modulekey;
@@ -70,5 +92,26 @@ class main_form extends moodleform {
             $buttonarray[] = $mform->createElement('submit', 'resetbtn', get_string('reset_course', 'mod_vkr'));
             $mform->addGroup($buttonarray, 'courseactions', '', [' '], false);
         }
+    }
+
+    public function validation($data, $files): array {
+        $errors = parent::validation($data, $files);
+
+        if (!empty($data['preparebtn']) || !empty($data['updatebtn'])) {
+            $specialityoptions = $this->_customdata['specialityoptions'] ?? [];
+            $yearoptions = $this->_customdata['yearoptions'] ?? [];
+
+            if (empty($data['speciality']) ||
+                    !array_key_exists($data['speciality'], $specialityoptions)) {
+                $errors['speciality'] = get_string('error_speciality', 'mod_vkr');
+            }
+
+            $yearkey = (string)($data['courseyear'] ?? '');
+            if ($yearkey === '' || !array_key_exists($yearkey, $yearoptions)) {
+                $errors['courseyear'] = get_string('error_courseyear', 'mod_vkr');
+            }
+        }
+
+        return $errors;
     }
 }
