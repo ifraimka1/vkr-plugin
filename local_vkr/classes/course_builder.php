@@ -105,6 +105,7 @@ class course_builder {
             return;
         }
 
+        self::enable_course_completion_tracking($courseid);
         self::set_course_name($courseid, $speciality, $courseyear);
         self::create_sections($courseid, $sectionnumber);
         self::create_modules($courseid, ++$sectionnumber, $duedate, $selectedmodulekeys);
@@ -198,6 +199,8 @@ class course_builder {
                     continue;
                 }
 
+                self::update_module_availability_by_dependencies($courseid, (int)$existingitems[0]->cmid, $module);
+
                 for ($i = 1; $i < count($existingitems); $i++) {
                     course_delete_module($existingitems[$i]->cmid);
                 }
@@ -284,6 +287,20 @@ class course_builder {
         update_course($updatedcourse);
     }
 
+    private static function enable_course_completion_tracking(int $courseid): void {
+        global $DB;
+
+        $currentvalue = $DB->get_field('course', 'enablecompletion', ['id' => $courseid]);
+        if ((int)$currentvalue === 1) {
+            return;
+        }
+
+        $updatedcourse = new \stdClass();
+        $updatedcourse->id = $courseid;
+        $updatedcourse->enablecompletion = 1;
+        update_course($updatedcourse);
+    }
+
     private static function create_sections($courseid, $sectionnumber): void {
         global $DB;
         $hassectionsidnumber = self::has_sections_idnumber();
@@ -318,6 +335,11 @@ class course_builder {
         require_once($CFG->dirroot . '/mod/assign/lib.php');
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
+        $availability = self::build_availability_by_dependencies(
+            (int)$courseid,
+            $module['dependencies'] ?? []
+        );
+
         $createdmodinfo = (object)[
             'modulename' => 'assign',
             'section' => $sectionnumber,
@@ -349,7 +371,7 @@ class course_builder {
             'assignfeedback_comments_enabled' => 1,
             'visible' => 1,
             'cmidnumber' => self::get_module_idnumber($modulekey),
-            'availability' => null,
+            'availability' => $availability,
             'assignsubmission_file_enabled' => 1,
             'assignsubmission_file_maxfiles' => 20,
             'assignsubmission_file_maxsizebytes' => 5242880,
@@ -447,6 +469,90 @@ class course_builder {
         $columns = $DB->get_columns('course_sections');
         self::$hassectionsidnumber = is_array($columns) && array_key_exists('idnumber', $columns);
         return self::$hassectionsidnumber;
+    }
+
+    private static function update_module_availability_by_dependencies(int $courseid, int $cmid, array $module): void {
+        global $DB;
+
+        $availability = self::build_availability_by_dependencies(
+            $courseid,
+            $module['dependencies'] ?? []
+        );
+        $DB->set_field('course_modules', 'availability', $availability, ['id' => $cmid]);
+    }
+
+    private static function build_availability_by_dependencies(int $courseid, array $dependencykeys): ?string {
+        if (empty($dependencykeys)) {
+            return null;
+        }
+
+        $dependencycmids = self::get_dependency_cmids($courseid, $dependencykeys);
+        if (empty($dependencycmids)) {
+            return null;
+        }
+
+        $conditions = [];
+        $showconditions = [];
+        foreach ($dependencycmids as $dependencycmid) {
+            $conditions[] = [
+                'type' => 'completion',
+                'cm' => (int)$dependencycmid,
+                'e' => 1,
+            ];
+            $showconditions[] = true;
+        }
+
+        return json_encode([
+            'op' => '&',
+            'c' => $conditions,
+            'showc' => $showconditions,
+        ]);
+    }
+
+    private static function get_dependency_cmids(int $courseid, array $dependencykeys): array {
+        global $DB;
+
+        $dependencyidnumbers = [];
+        foreach ($dependencykeys as $dependencykey) {
+            if (!array_key_exists($dependencykey, self::$defaultmodules)) {
+                continue;
+            }
+            $dependencyidnumbers[$dependencykey] = self::get_module_idnumber($dependencykey);
+        }
+        if (empty($dependencyidnumbers)) {
+            return [];
+        }
+
+        [$insql, $params] = $DB->get_in_or_equal(array_values($dependencyidnumbers), SQL_PARAMS_NAMED, 'dep');
+        $params['courseid'] = $courseid;
+        $sql = "SELECT cm.id, cm.idnumber
+                  FROM {course_modules} cm
+                  JOIN {course_sections} cs ON cs.id = cm.section
+                 WHERE cs.course = :courseid
+                   AND cm.idnumber $insql";
+        $records = $DB->get_records_sql($sql, $params);
+        if (empty($records)) {
+            return [];
+        }
+
+        $cmidsbyidnumber = [];
+        foreach ($records as $record) {
+            $cmidsbyidnumber[$record->idnumber] = (int)$record->id;
+        }
+
+        $result = [];
+        foreach ($dependencykeys as $dependencykey) {
+            if (!array_key_exists($dependencykey, $dependencyidnumbers)) {
+                continue;
+            }
+            $idnumber = $dependencyidnumbers[$dependencykey];
+            if (!array_key_exists($idnumber, $cmidsbyidnumber)) {
+                continue;
+            }
+            $result[] = $cmidsbyidnumber[$idnumber];
+        }
+
+        return $result;
     }
 
     private static function protect_cm($cmid): void {
