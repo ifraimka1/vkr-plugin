@@ -166,8 +166,21 @@ switch ($tab) {
         return;
     }
 
+    const masterOptionsBySelect = new Map();
+    selects.forEach(function(select) {
+        masterOptionsBySelect.set(
+            select,
+            Array.from(select.options).map(function(option) {
+                return {
+                    value: option.value,
+                    text: option.text
+                };
+            })
+        );
+    });
+
     const syncOptions = function() {
-        const ownercount = new Map();
+        const selectedByAny = new Set();
 
         selects.forEach(function(select) {
             const selected = Array.from(select.selectedOptions).map(function(option) {
@@ -176,9 +189,8 @@ switch ($tab) {
                 return value !== '';
             });
 
-            const unique = Array.from(new Set(selected));
-            unique.forEach(function(value) {
-                ownercount.set(value, (ownercount.get(value) || 0) + 1);
+            Array.from(new Set(selected)).forEach(function(value) {
+                selectedByAny.add(value);
             });
         });
 
@@ -189,16 +201,39 @@ switch ($tab) {
                 })
             );
 
-            Array.from(select.options).forEach(function(option) {
-                if (option.value === '') {
+            const usedbyothers = new Set(
+                Array.from(selectedByAny).filter(function(value) {
+                    return !ownselected.has(value);
+                })
+            );
+
+            const masterOptions = masterOptionsBySelect.get(select) || [];
+            const selectedValues = Array.from(ownselected);
+
+            select.innerHTML = '';
+            masterOptions.forEach(function(optiondata) {
+                if (optiondata.value === '') {
+                    const emptyoption = new Option(optiondata.text, optiondata.value, false, false);
+                    select.add(emptyoption);
                     return;
                 }
 
-                const usedcount = ownercount.get(option.value) || 0;
-                const usedbyother = usedcount > (ownselected.has(option.value) ? 1 : 0);
+                if (usedbyothers.has(optiondata.value)) {
+                    return;
+                }
 
-                option.disabled = usedbyother;
-                option.hidden = usedbyother;
+                const isselected = ownselected.has(optiondata.value);
+                const option = new Option(optiondata.text, optiondata.value, isselected, isselected);
+                select.add(option);
+            });
+
+            selectedValues.forEach(function(value) {
+                const option = Array.from(select.options).find(function(item) {
+                    return item.value === value;
+                });
+                if (option) {
+                    option.selected = true;
+                }
             });
 
             if (window.jQuery) {
