@@ -14,21 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
-/**
- * Plugin version and other meta-data are defined here.
- *
- * @package     mod_vkr
- * @copyright   2025 Ifraim Solomonov solomonov@sfedu.ru
- * @license     https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->component = 'mod_vkr';
-$plugin->release = '0.1.0';
-$plugin->version = 2026041700;
-$plugin->requires = 2022112800;
-$plugin->maturity = MATURITY_ALPHA;
-$plugin->dependencies = [
-    'local_vkr' => 2026041700,
-];
+if ($hassiteconfig) {
+    $settings = new admin_settingpage('local_vkr', get_string('pluginname', 'local_vkr'));
+    $ADMIN->add('localplugins', $settings);
+
+    $settings->add(new admin_setting_configtextarea(
+        'local_vkr/specialitys',
+        get_string('specialitys', 'local_vkr'),
+        get_string('specialitys_desc', 'local_vkr'),
+        '',
+        PARAM_RAW_TRIMMED
+    ));
+}

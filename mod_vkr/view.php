@@ -45,6 +45,11 @@ if ($id) {
 require_login($course, true, $cm);
 
 $modulecontext = context_module::instance($cm->id);
+$needtoprepare = (bool)\local_vkr\course_builder::need_to_prepare($course->id);
+
+if ($needtoprepare && $tab !== 'main') {
+    redirect(new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'main']));
+}
 
 $PAGE->set_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => $tab]);
 $PAGE->set_title(format_string($moduleinstance->name));
@@ -56,8 +61,15 @@ $PAGE->requires->css('/mod/vkr/styles.css');
 
 $tabs = [
     new tabobject('main', new moodle_url('/mod/vkr/view.php', ['id' => $cm->id]), get_string('main', 'mod_vkr')),
-    new tabobject('assessors', new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'assessors']), get_string('assessors', 'mod_vkr')),
 ];
+
+if (!$needtoprepare) {
+    $tabs[] = new tabobject(
+        'assessors',
+        new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'assessors']),
+        get_string('assessors', 'mod_vkr')
+    );
+}
 
 switch ($tab) {
     case 'assessors':
@@ -94,11 +106,26 @@ switch ($tab) {
     default:
         $availablemodules = \local_vkr\course_builder::get_default_modules();
         $selectedmodules = \local_vkr\course_builder::get_selected_module_keys($course->id);
+        $specialityoptions = \local_vkr\course_builder::get_training_direction_options();
+        $yearoptions = \local_vkr\course_builder::get_year_options();
+        $selectednameconfig = \local_vkr\course_builder::get_selected_course_name_config($course->id);
+        if (!empty($selectednameconfig['speciality']) &&
+                !array_key_exists($selectednameconfig['speciality'], $specialityoptions)) {
+            $specialityoptions[$selectednameconfig['speciality']] = $selectednameconfig['speciality'];
+        }
+        $selectedyearkey = (string)$selectednameconfig['courseyear'];
+        if (!array_key_exists($selectedyearkey, $yearoptions)) {
+            $yearoptions[$selectedyearkey] = $selectedyearkey;
+        }
         $formdata = [
             'cmid' => $cm->id,
-            'needtoprepare' => (bool)\local_vkr\course_builder::need_to_prepare($course->id),
+            'needtoprepare' => $needtoprepare,
             'availablemodules' => $availablemodules,
             'selectedmodules' => $selectedmodules,
+            'specialityoptions' => $specialityoptions,
+            'yearoptions' => $yearoptions,
+            'selectedspeciality' => $selectednameconfig['speciality'],
+            'selectedcourseyear' => $selectednameconfig['courseyear'],
         ];
         $form = new \mod_vkr\form\main_form(null, $formdata);
         if ($data = $form->get_data()) {
@@ -111,10 +138,22 @@ switch ($tab) {
             }
 
             if (!empty($data->preparebtn)) {
-                \local_vkr\course_builder::prepare_course($course->id, $data->duedate, $selectedmodulekeys);
+                \local_vkr\course_builder::prepare_course(
+                    $course->id,
+                    $data->duedate,
+                    $data->speciality,
+                    (int)$data->courseyear,
+                    $selectedmodulekeys
+                );
                 \core\notification::success(get_string('notification_courseprepared', 'mod_vkr'));
             } else if (!empty($data->updatebtn)) {
-                \local_vkr\course_builder::update_course($course->id, $data->duedate, $selectedmodulekeys);
+                \local_vkr\course_builder::update_course(
+                    $course->id,
+                    $data->duedate,
+                    $selectedmodulekeys,
+                    $data->speciality,
+                    (int)$data->courseyear
+                );
                 \core\notification::success(get_string('notification_courseupdated', 'mod_vkr'));
             } else if (!empty($data->resetbtn)) {
                 \local_vkr\course_builder::reset_course($course->id);

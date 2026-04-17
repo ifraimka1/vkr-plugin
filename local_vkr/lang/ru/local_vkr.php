@@ -28,3 +28,6 @@ defined('MOODLE_INTERNAL') || die();
 $string['pluginname'] = 'Защита ВКР';
 $string['cannotdeletemodule'] = 'Автоматически созданный модуль нельзя удалить';
 $string['cannotdeletesection'] = 'Автоматически созданную секцию нельзя удалить';
+
+$string['specialitys'] = 'Направления подготовки';
+$string['specialitys_desc'] = 'Укажите одно направление на строку. Эти значения будут доступны при подготовке курса ВКР.';

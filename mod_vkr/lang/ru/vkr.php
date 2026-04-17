@@ -56,3 +56,9 @@ $string['selectassessor'] = 'Выбор оценщика';
 $string['apply'] = 'Подтвердить';
 $string['notification_assessorassigned'] = 'Оценщики успешно назначены.';
 $string['notification_assessorerror'] = 'Возникла ошибка при назначении оценщиков.';
+
+$string['speciality'] = 'Направление подготовки';
+$string['courseyear'] = 'Год';
+$string['select_option'] = 'Выберите...';
+$string['error_speciality'] = 'Выберите направление подготовки';
+$string['error_courseyear'] = 'Выберите год';
