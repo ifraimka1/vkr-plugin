@@ -50,29 +50,29 @@ class course_builder {
     ];
 
     private static array $defaultmodules = [
-        "adviser" => [
+        "advisor" => [
             'name' => 'Отзыв руководителя',
             'dependencies' => [],
         ],
         "commitment" => [
             'name' => 'Обязательство (заявление) на размещение ВКР в ЭБС ЮФУ',
-            'dependencies' => ['adviser'],
+            'dependencies' => ['advisor'],
         ],
         "normcontrol" => [
             'name' => 'Нормоконтроль',
-            'dependencies' => ['adviser'],
+            'dependencies' => ['advisor'],
         ],
         "review" => [
             'name' => 'Рецензент',
-            'dependencies' => ['adviser'],
+            'dependencies' => ['advisor'],
         ],
         "placement" => [
             'name' => 'Размещение ВКР в электронно-библиотечной системе ЮФУ',
-            'dependencies' => ['adviser'],
+            'dependencies' => ['advisor'],
         ],
         "pass" => [
             'name' => 'Допуск',
-            'dependencies' => ['adviser', 'commitment', 'normcontrol', 'review', 'placement'],
+            'dependencies' => ['advisor', 'commitment', 'normcontrol', 'review', 'placement'],
         ],
     ];
     private static ?bool $hassectionsidnumber = null;

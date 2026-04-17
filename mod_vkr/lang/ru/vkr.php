@@ -62,3 +62,9 @@ $string['courseyear'] = 'Год';
 $string['select_option'] = 'Выберите...';
 $string['error_speciality'] = 'Выберите направление подготовки';
 $string['error_courseyear'] = 'Выберите год';
+
+$string['vkrsupervisors'] = 'Руководители ВКР';
+$string['students'] = 'Студенты';
+$string['notification_supervisorssaved'] = 'Назначения руководителей ВКР успешно сохранены.';
+$string['notification_supervisorssaveerror'] = 'Ошибка при сохранении назначений руководителей ВКР.';
+$string['notification_supervisormappingduplicate'] = 'Один студент может быть назначен только одному руководителю ВКР.';

@@ -24,6 +24,7 @@
 
 require(__DIR__.'/../../config.php');
 require_once(__DIR__.'/lib.php');
+require_once(__DIR__.'/classes/form/supervisors_form.php');
 
 // Course module id.
 $id = optional_param('id', 0, PARAM_INT);
@@ -62,12 +63,18 @@ $PAGE->requires->css('/mod/vkr/styles.css');
 $tabs = [
     new tabobject('main', new moodle_url('/mod/vkr/view.php', ['id' => $cm->id]), get_string('main', 'mod_vkr')),
 ];
+$supervisorsform = null;
 
 if (!$needtoprepare) {
     $tabs[] = new tabobject(
         'assessors',
         new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'assessors']),
         get_string('assessors', 'mod_vkr')
+    );
+    $tabs[] = new tabobject(
+        'supervisors',
+        new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'supervisors']),
+        get_string('vkrsupervisors', 'mod_vkr')
     );
 }
 
@@ -100,6 +107,151 @@ switch ($tab) {
             }
             redirect(new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'assessors']));
         }
+
+        break;
+
+    case 'supervisors':
+        $supervisors = \mod_vkr\assessors_manager::get_supervisor_role_users($course->id);
+        $students = \mod_vkr\assessors_manager::get_student_role_users($course->id);
+        $currentmapping = \mod_vkr\assessors_manager::get_advisor_supervisor_map($course->id);
+        $supervisorsform = new \mod_vkr\form\supervisors_form(null, [
+            'cmid' => $cm->id,
+            'supervisors' => $supervisors,
+            'students' => $students,
+            'currentmapping' => $currentmapping,
+        ]);
+
+        if ($data = $supervisorsform->get_data()) {
+            $selectedmap = [];
+            $studenttosupervisor = [];
+            $hasduplicates = false;
+
+            foreach ($supervisors as $supervisor) {
+                $fieldname = 'supervisor_students_' . (int)$supervisor->id;
+                $studentids = $data->{$fieldname} ?? [];
+                if (!is_array($studentids)) {
+                    $studentids = [$studentids];
+                }
+                $studentids = array_values(array_unique(array_filter(array_map('intval', $studentids))));
+                $selectedmap[(int)$supervisor->id] = $studentids;
+
+                foreach ($studentids as $studentid) {
+                    if (array_key_exists($studentid, $studenttosupervisor)) {
+                        $hasduplicates = true;
+                        break 2;
+                    }
+                    $studenttosupervisor[$studentid] = (int)$supervisor->id;
+                }
+            }
+
+            if ($hasduplicates) {
+                \core\notification::error(get_string('notification_supervisormappingduplicate', 'mod_vkr'));
+            } else {
+                $success = \mod_vkr\assessors_manager::assign_advisor_supervisors($course->id, $selectedmap);
+                if ($success) {
+                    \core\notification::success(get_string('notification_supervisorssaved', 'mod_vkr'));
+                } else {
+                    \core\notification::error(get_string('notification_supervisorssaveerror', 'mod_vkr'));
+                }
+            }
+
+            redirect(new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'supervisors']));
+        }
+
+        $PAGE->requires->js_init_code(<<<'JS'
+(function() {
+    const selector = "select[name^='supervisor_students_']";
+    const selects = Array.from(document.querySelectorAll(selector));
+    if (!selects.length) {
+        return;
+    }
+
+    const masterOptionsBySelect = new Map();
+    selects.forEach(function(select) {
+        masterOptionsBySelect.set(
+            select,
+            Array.from(select.options).map(function(option) {
+                return {
+                    value: option.value,
+                    text: option.text
+                };
+            })
+        );
+    });
+
+    const syncOptions = function() {
+        const selectedByAny = new Set();
+
+        selects.forEach(function(select) {
+            const selected = Array.from(select.selectedOptions).map(function(option) {
+                return option.value;
+            }).filter(function(value) {
+                return value !== '';
+            });
+
+            Array.from(new Set(selected)).forEach(function(value) {
+                selectedByAny.add(value);
+            });
+        });
+
+        selects.forEach(function(select) {
+            const ownselected = new Set(
+                Array.from(select.selectedOptions).map(function(option) {
+                    return option.value;
+                })
+            );
+
+            const usedbyothers = new Set(
+                Array.from(selectedByAny).filter(function(value) {
+                    return !ownselected.has(value);
+                })
+            );
+
+            const masterOptions = masterOptionsBySelect.get(select) || [];
+            const selectedValues = Array.from(ownselected);
+
+            select.innerHTML = '';
+            masterOptions.forEach(function(optiondata) {
+                if (optiondata.value === '') {
+                    const emptyoption = new Option(optiondata.text, optiondata.value, false, false);
+                    select.add(emptyoption);
+                    return;
+                }
+
+                if (usedbyothers.has(optiondata.value)) {
+                    return;
+                }
+
+                const isselected = ownselected.has(optiondata.value);
+                const option = new Option(optiondata.text, optiondata.value, isselected, isselected);
+                select.add(option);
+            });
+
+            selectedValues.forEach(function(value) {
+                const option = Array.from(select.options).find(function(item) {
+                    return item.value === value;
+                });
+                if (option) {
+                    option.selected = true;
+                }
+            });
+
+            if (window.jQuery) {
+                window.jQuery(select).trigger('change.select2');
+            }
+        });
+    };
+
+    document.addEventListener('change', function(event) {
+        if (event.target && event.target.matches(selector)) {
+            syncOptions();
+        }
+    });
+
+    syncOptions();
+})();
+JS
+        );
 
         break;
 
@@ -170,6 +322,12 @@ echo $OUTPUT->tabtree($tabs, $tab);
 switch ($tab) {
     case 'assessors':
         echo \mod_vkr\assessors_manager::render_assessors_form($cm->id, $course->id);
+        break;
+
+    case 'supervisors':
+        if ($supervisorsform !== null) {
+            $supervisorsform->display();
+        }
         break;
 
     default:
