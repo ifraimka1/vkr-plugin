@@ -158,6 +158,66 @@ switch ($tab) {
             redirect(new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'supervisors']));
         }
 
+        $PAGE->requires->js_init_code(<<<'JS'
+(function() {
+    const selector = "select[name^='supervisor_students_']";
+    const selects = Array.from(document.querySelectorAll(selector));
+    if (!selects.length) {
+        return;
+    }
+
+    const syncOptions = function() {
+        const ownercount = new Map();
+
+        selects.forEach(function(select) {
+            const selected = Array.from(select.selectedOptions).map(function(option) {
+                return option.value;
+            }).filter(function(value) {
+                return value !== '';
+            });
+
+            const unique = Array.from(new Set(selected));
+            unique.forEach(function(value) {
+                ownercount.set(value, (ownercount.get(value) || 0) + 1);
+            });
+        });
+
+        selects.forEach(function(select) {
+            const ownselected = new Set(
+                Array.from(select.selectedOptions).map(function(option) {
+                    return option.value;
+                })
+            );
+
+            Array.from(select.options).forEach(function(option) {
+                if (option.value === '') {
+                    return;
+                }
+
+                const usedcount = ownercount.get(option.value) || 0;
+                const usedbyother = usedcount > (ownselected.has(option.value) ? 1 : 0);
+
+                option.disabled = usedbyother;
+                option.hidden = usedbyother;
+            });
+
+            if (window.jQuery) {
+                window.jQuery(select).trigger('change.select2');
+            }
+        });
+    };
+
+    document.addEventListener('change', function(event) {
+        if (event.target && event.target.matches(selector)) {
+            syncOptions();
+        }
+    });
+
+    syncOptions();
+})();
+JS
+        );
+
         break;
 
     default:
