@@ -248,6 +248,198 @@ class assessors_manager {
     }
 
     /**
+     * Get enrolled course users with role "Руководитель ВКР".
+     *
+     * @param int $courseid
+     * @return array<int, \stdClass>
+     */
+    public static function get_supervisor_role_users(int $courseid): array {
+        return self::get_role_users_by_candidates(
+            $courseid,
+            ['advisor', 'vkrsupervisor', 'supervisorvkr', 'supervisor'],
+            ['Руководитель ВКР', 'VKR Supervisor']
+        );
+    }
+
+    /**
+     * Get enrolled course users with role "student".
+     *
+     * @param int $courseid
+     * @return array<int, \stdClass>
+     */
+    public static function get_student_role_users(int $courseid): array {
+        return self::get_role_users_by_candidates(
+            $courseid,
+            ['student'],
+            ['Студент', 'Student']
+        );
+    }
+
+    /**
+     * Get current supervisor => student ids mapping for "advisor" assignment.
+     *
+     * @param int $courseid
+     * @return array<int, array<int, int>>
+     */
+    public static function get_advisor_supervisor_map(int $courseid): array {
+        $assignment = self::get_advisor_assign($courseid);
+        if (!$assignment) {
+            return [];
+        }
+
+        $students = self::get_student_role_users($courseid);
+        $mapping = [];
+        foreach ($students as $student) {
+            $flags = $assignment->get_user_flags((int)$student->id, false);
+            $supervisorid = (int)($flags->allocatedmarker ?? 0);
+            if ($supervisorid <= 0) {
+                continue;
+            }
+
+            if (!array_key_exists($supervisorid, $mapping)) {
+                $mapping[$supervisorid] = [];
+            }
+            $mapping[$supervisorid][] = (int)$student->id;
+        }
+
+        return $mapping;
+    }
+
+    /**
+     * Assign supervisors to students in "advisor" assignment using allocatedmarker.
+     *
+     * @param int $courseid
+     * @param array<int, array<int, int>> $supervisorstudentmap
+     * @return bool
+     */
+    public static function assign_advisor_supervisors(int $courseid, array $supervisorstudentmap): bool {
+        $assignment = self::get_advisor_assign($courseid);
+        if (!$assignment) {
+            self::log('advisor assignment was not found', ['courseid' => $courseid]);
+            return false;
+        }
+
+        $students = self::get_student_role_users($courseid);
+        $validstudentids = array_map(static function($student) {
+            return (int)$student->id;
+        }, array_values($students));
+        $validstudentids = array_flip($validstudentids);
+
+        $studenttosupervisor = [];
+        foreach ($supervisorstudentmap as $supervisorid => $studentids) {
+            $supervisorid = (int)$supervisorid;
+            if ($supervisorid <= 0) {
+                continue;
+            }
+
+            foreach ($studentids as $studentid) {
+                $studentid = (int)$studentid;
+                if (!array_key_exists($studentid, $validstudentids)) {
+                    continue;
+                }
+                $studenttosupervisor[$studentid] = $supervisorid;
+            }
+        }
+
+        foreach ($students as $student) {
+            $studentid = (int)$student->id;
+            $flags = $assignment->get_user_flags($studentid, true);
+            $flags->allocatedmarker = (int)($studenttosupervisor[$studentid] ?? 0);
+            if (!$assignment->update_user_flags($flags)) {
+                self::log('Failed to update advisor allocation', [
+                    'courseid' => $courseid,
+                    'studentid' => $studentid,
+                    'allocatedmarker' => (int)$flags->allocatedmarker,
+                ]);
+                return false;
+            }
+        }
+
+        self::log('Updated advisor supervisor allocation', [
+            'courseid' => $courseid,
+            'pairs' => $studenttosupervisor,
+        ]);
+        return true;
+    }
+
+    /**
+     * Render supervisor assignment form using Moodle HTML helpers.
+     *
+     * @param int $cmid
+     * @param int $courseid
+     * @return string
+     */
+    public static function render_supervisors_form(int $cmid, int $courseid): string {
+        $supervisors = self::get_supervisor_role_users($courseid);
+        $students = self::get_student_role_users($courseid);
+        $currentmapping = self::get_advisor_supervisor_map($courseid);
+
+        $studentoptions = [];
+        foreach ($students as $student) {
+            $studentoptions[(int)$student->id] = fullname($student);
+        }
+
+        $table = new \html_table();
+        $table->head = [
+            get_string('vkrsupervisors', 'mod_vkr'),
+            get_string('students', 'mod_vkr'),
+        ];
+        $table->attributes['class'] = 'generaltable';
+
+        foreach ($supervisors as $supervisor) {
+            $fieldname = 'supervisor_students_' . (int)$supervisor->id;
+            $select = \html_writer::select(
+                $studentoptions,
+                $fieldname . '[]',
+                $currentmapping[(int)$supervisor->id] ?? [],
+                false,
+                ['multiple' => 'multiple', 'size' => 10]
+            );
+
+            $table->data[] = [
+                fullname($supervisor),
+                $select,
+            ];
+        }
+
+        $hidden = \html_writer::empty_tag('input', [
+            'type' => 'hidden',
+            'name' => 'id',
+            'value' => $cmid,
+        ]);
+        $hidden .= \html_writer::empty_tag('input', [
+            'type' => 'hidden',
+            'name' => 'tab',
+            'value' => 'supervisors',
+        ]);
+        $hidden .= \html_writer::empty_tag('input', [
+            'type' => 'hidden',
+            'name' => 'savevkrsupervisors',
+            'value' => 1,
+        ]);
+        $hidden .= \html_writer::empty_tag('input', [
+            'type' => 'hidden',
+            'name' => 'sesskey',
+            'value' => sesskey(),
+        ]);
+
+        $submit = \html_writer::empty_tag('input', [
+            'type' => 'submit',
+            'class' => 'btn btn-primary',
+            'value' => get_string('savechanges'),
+        ]);
+
+        return \html_writer::start_tag('form', [
+            'method' => 'post',
+            'action' => (new \moodle_url('/mod/vkr/view.php'))->out(false),
+        ]) .
+            $hidden .
+            \html_writer::table($table) .
+            \html_writer::div($submit, 'mt-3') .
+            \html_writer::end_tag('form');
+    }
+
+    /**
      * Resolve the "Нормоконтроль" assignment in the course.
      *
      * @param int $courseid
@@ -294,6 +486,107 @@ class assessors_manager {
     }
 
     /**
+     * Resolve the "advisor" assignment in the course.
+     *
+     * @param int $courseid
+     * @return \assign|null
+     */
+    private static function get_advisor_assign(int $courseid): ?\assign {
+        return self::get_assign_by_module_key($courseid, 'advisor');
+    }
+
+    /**
+     * Resolve assignment by local_vkr module key.
+     *
+     * @param int $courseid
+     * @param string $modulekey
+     * @return \assign|null
+     */
+    private static function get_assign_by_module_key(int $courseid, string $modulekey): ?\assign {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
+        $cmidnumber = \local_vkr\course_builder::get_module_idnumber($modulekey);
+        $record = $DB->get_record_sql(
+            "SELECT a.id, cm.id AS cmid
+               FROM {course_modules} cm
+               JOIN {modules} m ON m.id = cm.module
+               JOIN {assign} a ON a.id = cm.instance
+              WHERE cm.course = :courseid
+                AND m.name = :modname
+                AND cm.idnumber = :cmidnumber",
+            [
+                'courseid' => $courseid,
+                'modname' => 'assign',
+                'cmidnumber' => $cmidnumber,
+            ]
+        );
+
+        if (!$record) {
+            self::log('SQL did not find assignment by key', [
+                'courseid' => $courseid,
+                'modulekey' => $modulekey,
+            ]);
+            return null;
+        }
+
+        $course = get_course($courseid);
+        $cm = get_coursemodule_from_id('assign', $record->cmid, $courseid, false, MUST_EXIST);
+        $context = \context_module::instance($cm->id);
+
+        return new \assign($context, $cm, $course);
+    }
+
+    /**
+     * Get enrolled course users for one of candidate role ids.
+     *
+     * @param int $courseid
+     * @param array<int, string> $shortnames
+     * @param array<int, string> $names
+     * @return array<int, \stdClass>
+     */
+    private static function get_role_users_by_candidates(int $courseid, array $shortnames, array $names): array {
+        global $DB;
+
+        $role = null;
+        foreach ($shortnames as $shortname) {
+            $role = $DB->get_record('role', ['shortname' => $shortname], 'id', IGNORE_MISSING);
+            if ($role) {
+                break;
+            }
+        }
+        if (!$role) {
+            foreach ($names as $name) {
+                $role = $DB->get_record('role', ['name' => $name], 'id', IGNORE_MISSING);
+                if ($role) {
+                    break;
+                }
+            }
+        }
+        if (!$role) {
+            return [];
+        }
+
+        $coursecontext = \context_course::instance($courseid);
+        $users = get_role_users(
+            (int)$role->id,
+            $coursecontext,
+            false,
+            'u.id, u.firstname, u.lastname, u.middlename, u.alternatename, u.firstnamephonetic, u.lastnamephonetic, u.email',
+            'u.lastname ASC, u.firstname ASC'
+        );
+
+        foreach ($users as $userid => $user) {
+            if (!is_enrolled($coursecontext, $user, '', true)) {
+                unset($users[$userid]);
+            }
+        }
+
+        return $users;
+    }
+
+    /**
      * Write a diagnostic message for server-side troubleshooting.
      *
      * @param string $message
@@ -309,12 +602,6 @@ class assessors_manager {
             }
         }
 
-        global $CFG;
-
         error_log($line);
-
-        if (!empty($CFG->debug) && ((int)$CFG->debug & DEBUG_DEVELOPER)) {
-            debugging($line, DEBUG_DEVELOPER);
-        }
     }
 }
