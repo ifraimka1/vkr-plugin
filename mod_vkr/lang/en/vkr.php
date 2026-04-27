@@ -34,8 +34,6 @@ $string['modulenameplural'] = 'VKR Activities';
 //mdl_form
 $string['vkrname'] = 'Title';
 $string['vkrname_help'] = 'Enter the name for this VKR activity.';
-$string['vkrsettings'] = 'Settings';
-$string['vkrfieldset'] = 'Custom example fieldset';
 
 $string['main'] = 'Main';
 $string['prepare_course'] = 'Prepare course';

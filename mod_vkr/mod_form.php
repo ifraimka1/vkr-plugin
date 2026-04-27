@@ -66,11 +66,6 @@ class mod_vkr_mod_form extends moodleform_mod {
             $this->add_intro_editor();
         }
 
-        // Adding the rest of mod_vkr settings, spreading all them into this fieldset
-        // ... or adding more fieldsets ('header' elements) if needed for better logic.
-        $mform->addElement('static', 'label1', 'vkrsettings', get_string('vkrsettings', 'mod_vkr'));
-        $mform->addElement('header', 'vkrfieldset', get_string('vkrfieldset', 'mod_vkr'));
-
         // Add standard elements.
         $this->standard_coursemodule_elements();
 

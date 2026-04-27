@@ -34,8 +34,6 @@ $string['modulenameplural'] = 'Защиты ВКР';
 //mdl_form
 $string['vkrname'] = 'Название';
 $string['vkrname_help'] = 'Введите название для модуля "Защита ВКР".';
-$string['vkrsettings'] = 'Настройки';
-$string['vkrfieldset'] = 'А эта строка тут нужна вообще?';
 
 $string['main'] = 'Главная';
 $string['prepare_course'] = 'Подготовить курс';
