@@ -27,6 +27,10 @@ namespace local_vkr;
 class course_builder {
     private const AUTO_IDNUMBER_PREFIX = 'vkr_';
     private const MODULE_IDNUMBER_PREFIX = 'vkr_mod_';
+    private const GEK_MEMBER_MODULE_IDNUMBER_PREFIX = 'vkr_gekmember_';
+    private const PRESEDATEL_MODULE_IDNUMBER_PREFIX = 'vkr_predsedatel_';
+    private const GEK_MEMBER_ROLE_SHORTNAME = 'gekmember';
+    private const PRESEDATEL_ROLE_SHORTNAME = 'predsedatel';
 
     private static array $defaultsections = [
         [
@@ -109,6 +113,7 @@ class course_builder {
         self::set_course_name($courseid, $speciality, $courseyear);
         self::create_sections($courseid, $sectionnumber);
         self::create_modules($courseid, ++$sectionnumber, $duedate, $selectedmodulekeys);
+        self::sync_gek_role_modules($courseid);
     }
 
     public static function get_training_direction_options(): array {
@@ -439,6 +444,252 @@ class course_builder {
 
     private static function get_section_idnumber(string $sectionkey): string {
         return self::AUTO_IDNUMBER_PREFIX . 'section_' . $sectionkey;
+    }
+
+    public static function create_or_update_gek_member_module(int $courseid, \stdClass $user): void {
+        self::create_or_update_gek_role_module($courseid, $user, self::GEK_MEMBER_ROLE_SHORTNAME);
+    }
+
+    public static function create_or_update_gek_role_module(
+        int $courseid,
+        \stdClass $user,
+        string $roleshortname
+    ): void {
+        global $CFG, $DB;
+
+        if (!self::is_prepared($courseid) || !self::is_supported_gek_role($roleshortname)) {
+            return;
+        }
+
+        require_once($CFG->dirroot . '/mod/assign/lib.php');
+        require_once($CFG->dirroot . '/mod/assign/locallib.php');
+
+        $sectionnumber = self::get_modules_section_number($courseid);
+        if ($sectionnumber === false) {
+            return;
+        }
+        $sectionnumber += 1;
+
+        $idnumber = self::get_gek_role_module_idnumber((int)$user->id, $roleshortname);
+        $name = self::get_gek_role_module_name($user, $roleshortname);
+
+        $existingcms = self::get_existing_gek_role_modules_for_user($courseid, (int)$user->id, $roleshortname);
+
+        if (!empty($existingcms)) {
+            $existingcm = reset($existingcms);
+            $assign = $DB->get_record('assign', ['id' => $existingcm->instance], '*', MUST_EXIST);
+
+            $data = (object)[
+                'coursemodule' => $existingcm->id,
+                'course' => $courseid,
+                'modulename' => 'assign',
+                'instance' => $assign->id,
+                'name' => $name,
+                'duedate' => 0,
+                'cmidnumber' => $idnumber,
+            ];
+
+            update_moduleinfo($existingcm, $data, $courseid);
+
+            foreach (array_slice($existingcms, 1) as $duplicatecm) {
+                course_delete_module($duplicatecm->id);
+            }
+            return;
+        }
+
+        $createdmodinfo = (object)[
+            'modulename' => 'assign',
+            'section' => $sectionnumber,
+            'course' => $courseid,
+            'name' => $name,
+            'introeditor' => [
+                'text' => '',
+                'format' => FORMAT_HTML,
+            ],
+            'alwaysshowdescription' => 1,
+            'submissiondrafts' => 0,
+            'requiresubmissionstatement' => 0,
+            'sendnotifications' => 0,
+            'allowsubmissionsfromdate' => 0,
+            'sendlatenotifications' => 0,
+            'duedate' => 0,
+            'cutoffdate' => 0,
+            'grade' => 100,
+            'gradingduedate' => 0,
+            'teamsubmission' => 0,
+            'requireallteammemberssubmit' => 0,
+            'teamsubmissiongroupingid' => 0,
+            'blindmarking' => 0,
+            'hidegrader' => 0,
+            'attemptreopenmethod' => 'none',
+            'maxattempts' => -1,
+            'markingworkflow' => 1,
+            'markingallocation' => 1,
+            'assignfeedback_comments_enabled' => 1,
+            'visible' => 1,
+            'cmidnumber' => $idnumber,
+            'assignsubmission_file_enabled' => 1,
+            'assignsubmission_file_maxfiles' => 20,
+            'assignsubmission_file_maxsizebytes' => 5242880,
+        ];
+
+        $created = create_module($createdmodinfo);
+        self::protect_cm($created->coursemodule);
+    }
+
+    public static function sync_gek_member_modules(int $courseid): void {
+        self::sync_gek_role_modules($courseid);
+    }
+
+    public static function sync_gek_role_modules(int $courseid): void {
+        global $DB;
+
+        if (!self::is_prepared($courseid)) {
+            return;
+        }
+
+        $context = \context_course::instance($courseid);
+        foreach (self::get_supported_gek_roles() as $roleshortname) {
+            $role = $DB->get_record('role', ['shortname' => $roleshortname], 'id', IGNORE_MISSING);
+            if (!$role) {
+                continue;
+            }
+
+            $users = get_role_users($role->id, $context, false, 'u.id, u.firstname, u.lastname');
+            $existingbyuser = self::get_existing_gek_role_modules($courseid, $roleshortname);
+
+            $actualuserids = [];
+            foreach ($users as $user) {
+                $actualuserids[] = (int)$user->id;
+                self::create_or_update_gek_role_module($courseid, $user, $roleshortname);
+            }
+
+            foreach ($existingbyuser as $userid => $cms) {
+                if (!in_array((int)$userid, $actualuserids, true)) {
+                    foreach ($cms as $cm) {
+                        course_delete_module($cm->id);
+                    }
+                }
+            }
+        }
+
+        rebuild_course_cache($courseid, true);
+    }
+
+    public static function delete_gek_member_module(int $courseid, int $userid): void {
+        self::delete_gek_role_module($courseid, $userid, self::GEK_MEMBER_ROLE_SHORTNAME);
+    }
+
+    public static function delete_gek_role_module(int $courseid, int $userid, string $roleshortname): void {
+        if (!self::is_supported_gek_role($roleshortname)) {
+            return;
+        }
+
+        $cms = self::get_existing_gek_role_modules_for_user($courseid, $userid, $roleshortname);
+        if (!empty($cms)) {
+            foreach ($cms as $cm) {
+                course_delete_module($cm->id);
+            }
+            rebuild_course_cache($courseid, true);
+        }
+    }
+
+    private static function get_existing_gek_role_modules_for_user(
+        int $courseid,
+        int $userid,
+        string $roleshortname
+    ): array {
+        global $DB;
+
+        $sql = "SELECT cm.*, cs.course
+              FROM {course_modules} cm
+              JOIN {course_sections} cs ON cs.id = cm.section
+              JOIN {modules} m ON m.id = cm.module
+             WHERE cs.course = :courseid
+               AND m.name = :modname
+               AND cm.idnumber = :idnumber";
+
+        return array_values($DB->get_records_sql($sql, [
+            'courseid' => $courseid,
+            'modname' => 'assign',
+            'idnumber' => self::get_gek_role_module_idnumber($userid, $roleshortname),
+        ]));
+    }
+
+    private static function get_existing_gek_role_modules(int $courseid, string $roleshortname): array {
+        global $DB;
+
+        $prefix = self::get_gek_role_module_idnumber_prefix($roleshortname);
+        if ($prefix === null) {
+            return [];
+        }
+
+        $sql = "SELECT cm.id, cm.idnumber
+              FROM {course_modules} cm
+              JOIN {course_sections} cs ON cs.id = cm.section
+              JOIN {modules} m ON m.id = cm.module
+             WHERE cs.course = :courseid
+               AND m.name = :modname
+               AND " . $DB->sql_like('cm.idnumber', ':prefix');
+
+        $records = $DB->get_records_sql($sql, [
+            'courseid' => $courseid,
+            'modname' => 'assign',
+            'prefix' => $prefix . '%',
+        ]);
+
+        $result = [];
+        foreach ($records as $record) {
+            $userid = (int)substr($record->idnumber, strlen($prefix));
+            if (!array_key_exists($userid, $result)) {
+                $result[$userid] = [];
+            }
+            $result[$userid][] = $record;
+        }
+
+        return $result;
+    }
+
+    private static function get_gek_role_module_idnumber(int $userid, string $roleshortname): string {
+        $prefix = self::get_gek_role_module_idnumber_prefix($roleshortname);
+        if ($prefix === null) {
+            return '';
+        }
+
+        return $prefix . $userid;
+    }
+
+    private static function get_gek_role_module_idnumber_prefix(string $roleshortname): ?string {
+        if ($roleshortname === self::GEK_MEMBER_ROLE_SHORTNAME) {
+            return self::GEK_MEMBER_MODULE_IDNUMBER_PREFIX;
+        }
+        if ($roleshortname === self::PRESEDATEL_ROLE_SHORTNAME) {
+            return self::PRESEDATEL_MODULE_IDNUMBER_PREFIX;
+        }
+
+        return null;
+    }
+
+    private static function get_gek_role_module_name(\stdClass $user, string $roleshortname): string {
+        $lastname = trim($user->lastname ?? '');
+        $firstname = trim($user->firstname ?? '');
+
+        if ($roleshortname === self::PRESEDATEL_ROLE_SHORTNAME) {
+            return "Председатель ГЭК {$lastname} {$firstname}";
+        }
+
+        return "Член ГЭК - {$lastname} {$firstname}";
+    }
+
+    public static function is_supported_gek_role(string $roleshortname): bool {
+        return in_array($roleshortname, self::get_supported_gek_roles(), true);
+    }
+
+    public static function get_supported_gek_roles(): array {
+        return [
+            self::GEK_MEMBER_ROLE_SHORTNAME,
+            self::PRESEDATEL_ROLE_SHORTNAME,
+        ];
     }
 
     private static function is_prepared(int $courseid): bool {

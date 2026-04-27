@@ -74,4 +74,58 @@ class observer {
     private static function is_vkr_idnumber(string $idnumber): bool {
         return strpos($idnumber, self::AUTO_IDNUMBER_PREFIX) === 0;
     }
+
+    public static function role_assigned(\core\event\role_assigned $event): void {
+        global $DB;
+
+        if ((int)$event->contextlevel !== CONTEXT_COURSE) {
+            return;
+        }
+
+        $role = $DB->get_record('role', ['id' => $event->objectid], 'id, shortname', IGNORE_MISSING);
+        if (!$role || !course_builder::is_supported_gek_role($role->shortname)) {
+            return;
+        }
+
+        $courseid = (int)$event->courseid;
+        $userid = (int)$event->relateduserid;
+
+        if (!$courseid || !$userid) {
+            return;
+        }
+
+        if (!course_builder::need_to_prepare($courseid) === false) {
+            // курс не подготовлен — ничего не делаем
+            return;
+        }
+
+        $user = $DB->get_record('user', ['id' => $userid], 'id, firstname, lastname', IGNORE_MISSING);
+        if (!$user) {
+            return;
+        }
+
+        course_builder::create_or_update_gek_role_module($courseid, $user, $role->shortname);
+    }
+
+    public static function role_unassigned(\core\event\role_unassigned $event): void {
+        global $DB;
+
+        if ((int)$event->contextlevel !== CONTEXT_COURSE) {
+            return;
+        }
+
+        $role = $DB->get_record('role', ['id' => $event->objectid], 'id, shortname', IGNORE_MISSING);
+        if (!$role || !course_builder::is_supported_gek_role($role->shortname)) {
+            return;
+        }
+
+        $courseid = (int)$event->courseid;
+        $userid = (int)$event->relateduserid;
+
+        if (!$courseid || !$userid) {
+            return;
+        }
+
+        course_builder::delete_gek_role_module($courseid, $userid, $role->shortname);
+    }
 }
