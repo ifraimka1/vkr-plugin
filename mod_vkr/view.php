@@ -84,21 +84,34 @@ switch ($tab) {
         if (optional_param('saveassessors', 0, PARAM_BOOL) && confirm_sesskey()) {
             $success = true;
             $groups = groups_get_all_groups($course->id, 0, 0, 'g.*', 'name ASC');
-            foreach ($groups as $group) {
-                $fieldname = 'assessorid_' . $group->id;
-                $assessorid = optional_param($fieldname, 0, PARAM_INT);
-                error_log('[mod_vkr][assessors] Received form value ' . json_encode([
-                    'courseid' => (int)$course->id,
-                    'groupid' => (int)$group->id,
-                    'fieldname' => $fieldname,
-                    'assessorid' => $assessorid,
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-                if ($assessorid == 0) {
-                    $assessorid = null;
+            foreach (\mod_vkr\assessors_manager::get_assessor_sections() as $section) {
+                $modulekey = $section['modulekey'];
+                if (!\mod_vkr\assessors_manager::is_assessor_assignment_available($course->id, $modulekey)) {
+                    continue;
                 }
-                $result = \mod_vkr\assessors_manager::assign_assessor($course->id, $group->id, $assessorid);
-                if (!$result) {
-                    $success = false;
+
+                foreach ($groups as $group) {
+                    $fieldname = \mod_vkr\assessors_manager::get_assessor_field_name($modulekey, (int)$group->id);
+                    $assessorid = optional_param($fieldname, 0, PARAM_INT);
+                    error_log('[mod_vkr][assessors] Received form value ' . json_encode([
+                        'courseid' => (int)$course->id,
+                        'modulekey' => $modulekey,
+                        'groupid' => (int)$group->id,
+                        'fieldname' => $fieldname,
+                        'assessorid' => $assessorid,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                    if ($assessorid == 0) {
+                        $assessorid = null;
+                    }
+                    $result = \mod_vkr\assessors_manager::assign_assessor(
+                        $course->id,
+                        (int)$group->id,
+                        $assessorid,
+                        $modulekey
+                    );
+                    if (!$result) {
+                        $success = false;
+                    }
                 }
             }
             if ($success) {

@@ -70,3 +70,7 @@ $string['notification_supervisorssaveerror'] = 'Ошибка при сохран
 $string['notification_supervisormappingduplicate'] = 'Один студент может быть назначен только одному руководителю ВКР.';
 
 $string['singleinstanceonly'] = 'В курсе может быть только один модуль ВКР';
+
+$string['assessorblock_normcontrol'] = 'Нормоконтроль';
+$string['assessorblock_review'] = 'Рецензент';
+$string['assessorassignmentmissing'] = 'Нет задания для назначения оценщиков';
