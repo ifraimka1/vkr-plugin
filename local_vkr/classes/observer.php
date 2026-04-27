@@ -83,7 +83,7 @@ class observer {
         }
 
         $role = $DB->get_record('role', ['id' => $event->objectid], 'id, shortname', IGNORE_MISSING);
-        if (!$role || $role->shortname !== 'gekmember') {
+        if (!$role || !course_builder::is_supported_gek_role($role->shortname)) {
             return;
         }
 
@@ -104,7 +104,7 @@ class observer {
             return;
         }
 
-        course_builder::create_or_update_gek_member_module($courseid, $user);
+        course_builder::create_or_update_gek_role_module($courseid, $user, $role->shortname);
     }
 
     public static function role_unassigned(\core\event\role_unassigned $event): void {
@@ -115,7 +115,7 @@ class observer {
         }
 
         $role = $DB->get_record('role', ['id' => $event->objectid], 'id, shortname', IGNORE_MISSING);
-        if (!$role || $role->shortname !== 'gekmember') {
+        if (!$role || !course_builder::is_supported_gek_role($role->shortname)) {
             return;
         }
 
@@ -126,6 +126,6 @@ class observer {
             return;
         }
 
-        course_builder::delete_gek_member_module($courseid, $userid);
+        course_builder::delete_gek_role_module($courseid, $userid, $role->shortname);
     }
 }
