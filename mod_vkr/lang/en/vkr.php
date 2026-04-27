@@ -67,3 +67,4 @@ $string['notification_supervisorssaved'] = 'Supervisor assignments saved success
 $string['notification_supervisorssaveerror'] = 'Error saving supervisor assignments.';
 $string['notification_supervisormappingduplicate'] = 'A student can be assigned to only one VKR supervisor.';
 $string['taskstogenerate'] = 'Assignments to create';
+$string['singleinstanceonly'] = 'Only one VKR module is allowed per course';

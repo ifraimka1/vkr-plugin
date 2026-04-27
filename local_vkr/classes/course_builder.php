@@ -24,6 +24,8 @@
 
 namespace local_vkr;
 
+use local_vkr\local\access;
+
 class course_builder {
     private const AUTO_IDNUMBER_PREFIX = 'vkr_';
     private const MODULE_IDNUMBER_PREFIX = 'vkr_mod_';
@@ -90,6 +92,8 @@ class course_builder {
     }
 
     public static function get_selected_module_keys($courseid): array {
+        access::require_gekmanager_in_course((int)$courseid);
+
         if (self::is_prepared($courseid) === false) {
             return array_keys(self::$defaultmodules);
         }
@@ -104,6 +108,8 @@ class course_builder {
         int $courseyear,
         ?array $selectedmodulekeys = null
     ): void {
+        access::require_gekmanager_in_course($courseid);
+
         $sectionnumber = self::need_to_prepare($courseid);
         if ($sectionnumber === false) {
             return;
@@ -149,6 +155,8 @@ class course_builder {
     public static function get_selected_course_name_config(int $courseid): array {
         global $DB;
 
+        access::require_gekmanager_in_course($courseid);
+
         $result = [
             'speciality' => '',
             'courseyear' => (int)date('Y'),
@@ -182,6 +190,8 @@ class course_builder {
         ?string $speciality = null,
         ?int $courseyear = null
     ): void {
+        access::require_gekmanager_in_course((int)$courseid);
+
         $sectionnumber = self::get_modules_section_number($courseid);
         if ($sectionnumber === false) {
             return;
@@ -221,6 +231,8 @@ class course_builder {
 
     public static function reset_course($courseid): void {
         global $DB;
+
+        access::require_gekmanager_in_course((int)$courseid);
 
         foreach (self::$defaultsections as $section) {
             $conditions = ['course' => $courseid];

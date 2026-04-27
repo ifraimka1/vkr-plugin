@@ -44,6 +44,7 @@ if ($id) {
 }
 
 require_login($course, true, $cm);
+\mod_vkr\local\access::require_gekmanager_access((int)$course->id);
 
 $modulecontext = context_module::instance($cm->id);
 $needtoprepare = (bool)\local_vkr\course_builder::need_to_prepare($course->id);
