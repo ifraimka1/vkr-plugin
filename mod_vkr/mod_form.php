@@ -77,4 +77,36 @@ class mod_vkr_mod_form extends moodleform_mod {
         // Add standard buttons.
         $this->add_action_buttons();
     }
+
+    /**
+     * Validates mod_vkr form data.
+     *
+     * @param array $data
+     * @param array $files
+     * @return array
+     */
+    public function validation($data, $files) {
+        global $CFG;
+
+        $errors = parent::validation($data, $files);
+        require_once($CFG->dirroot . '/mod/vkr/lib.php');
+
+        $courseid = (int)($data['course'] ?? 0);
+        if (!$courseid && !empty($this->current->course)) {
+            $courseid = (int)$this->current->course;
+        }
+
+        $instanceid = 0;
+        if (!empty($this->current->instance)) {
+            $instanceid = (int)$this->current->instance;
+        } elseif (!empty($data['instance'])) {
+            $instanceid = (int)$data['instance'];
+        }
+
+        if ($courseid > 0 && vkr_course_has_other_instance($courseid, $instanceid)) {
+            $errors['name'] = get_string('singleinstanceonly', 'mod_vkr');
+        }
+
+        return $errors;
+    }
 }

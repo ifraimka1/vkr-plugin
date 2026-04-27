@@ -68,3 +68,5 @@ $string['students'] = 'Студенты';
 $string['notification_supervisorssaved'] = 'Назначения руководителей ВКР успешно сохранены.';
 $string['notification_supervisorssaveerror'] = 'Ошибка при сохранении назначений руководителей ВКР.';
 $string['notification_supervisormappingduplicate'] = 'Один студент может быть назначен только одному руководителю ВКР.';
+
+$string['singleinstanceonly'] = 'В курсе может быть только один модуль ВКР';

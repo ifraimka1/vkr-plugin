@@ -30,6 +30,7 @@ $id = required_param('id', PARAM_INT);
 
 $course = $DB->get_record('course', ['id' => $id], '*', MUST_EXIST);
 require_course_login($course);
+\mod_vkr\local\access::require_gekmanager_access((int)$course->id);
 
 $coursecontext = context_course::instance($course->id);
 

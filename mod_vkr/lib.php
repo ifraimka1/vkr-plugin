@@ -49,6 +49,10 @@ function vkr_supports($feature) {
 function vkr_add_instance($moduleinstance, $mform = null) {
     global $DB;
 
+    if (vkr_course_has_other_instance((int)$moduleinstance->course)) {
+        throw new moodle_exception('singleinstanceonly', 'mod_vkr');
+    }
+
     $moduleinstance->timecreated = time();
 
     $id = $DB->insert_record('vkr', $moduleinstance);
@@ -72,6 +76,10 @@ function vkr_update_instance($moduleinstance, $mform = null) {
     $moduleinstance->timemodified = time();
     $moduleinstance->id = $moduleinstance->instance;
 
+    if (vkr_course_has_other_instance((int)$moduleinstance->course, (int)$moduleinstance->id)) {
+        throw new moodle_exception('singleinstanceonly', 'mod_vkr');
+    }
+
     return $DB->update_record('vkr', $moduleinstance);
 }
 
@@ -92,4 +100,45 @@ function vkr_delete_instance($id) {
     $DB->delete_records('vkr', ['id' => $id]);
 
     return true;
+}
+
+/**
+ * Dynamically controls module visibility for current user.
+ *
+ * Hide VKR activity in course UI when user has no "gekmanager" role
+ * in the course context.
+ *
+ * @param cm_info $cm
+ * @return void
+ */
+function vkr_cm_info_dynamic(cm_info $cm): void {
+    if (\mod_vkr\local\access::has_gekmanager_access((int)$cm->course)) {
+        return;
+    }
+
+    $cm->set_user_visible(false, get_string('nopermissions', 'error'));
+}
+
+/**
+ * Checks whether a course already has another vkr instance.
+ *
+ * @param int $courseid
+ * @param int $excludeinstanceid Instance id to ignore (used on update).
+ * @return bool
+ */
+function vkr_course_has_other_instance(int $courseid, int $excludeinstanceid = 0): bool {
+    global $DB;
+
+    if ($excludeinstanceid > 0) {
+        return $DB->record_exists_select(
+            'vkr',
+            'course = :courseid AND id <> :excludeid',
+            [
+                'courseid' => $courseid,
+                'excludeid' => $excludeinstanceid,
+            ]
+        );
+    }
+
+    return $DB->record_exists('vkr', ['course' => $courseid]);
 }
