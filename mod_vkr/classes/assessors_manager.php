@@ -27,24 +27,74 @@ defined('MOODLE_INTERNAL') || die();
  */
 class assessors_manager {
     /**
+     * Get assessor sections configuration for the "Оценщики" tab.
+     *
+     * @return array<int, array<string, string>>
+     */
+    public static function get_assessor_sections(): array {
+        return [
+            [
+                'modulekey' => 'normcontrol',
+                'roleshortname' => 'control',
+                'titlestring' => 'assessorblock_normcontrol',
+            ],
+            [
+                'modulekey' => 'review',
+                'roleshortname' => 'recenzent',
+                'titlestring' => 'assessorblock_review',
+            ],
+        ];
+    }
+
+    /**
+     * Build assessor field name for submitted form.
+     *
+     * @param string $modulekey
+     * @param int $groupid
+     * @return string
+     */
+    public static function get_assessor_field_name(string $modulekey, int $groupid): string {
+        return 'assessorid_' . $modulekey . '_' . $groupid;
+    }
+
+    /**
+     * Checks whether the assignment for assessor section exists in course.
+     *
+     * @param int $courseid
+     * @param string $modulekey
+     * @return bool
+     */
+    public static function is_assessor_assignment_available(int $courseid, string $modulekey): bool {
+        return self::get_assign_by_module_key($courseid, $modulekey) !== null;
+    }
+
+    /**
      * Assign an assessor to all members of the specified group.
      *
      * @param int $courseid
      * @param int $groupid
      * @param int|null $assessorid
+     * @param string $modulekey
      * @return bool
      */
-    public static function assign_assessor(int $courseid, int $groupid, ?int $assessorid): bool {
+    public static function assign_assessor(
+        int $courseid,
+        int $groupid,
+        ?int $assessorid,
+        string $modulekey = 'normcontrol'
+    ): bool {
         self::log('Starting assessor assignment', [
             'courseid' => $courseid,
             'groupid' => $groupid,
             'assessorid' => $assessorid,
+            'modulekey' => $modulekey,
         ]);
 
-        $assignment = self::get_normcontrol_assign($courseid);
+        $assignment = self::get_assign_by_module_key($courseid, $modulekey);
         if (!$assignment) {
-            self::log('Normcontrol assignment was not found', [
+            self::log('Assessor assignment was not found', [
                 'courseid' => $courseid,
+                'modulekey' => $modulekey,
             ]);
             return false;
         }
@@ -87,6 +137,7 @@ class assessors_manager {
             'courseid' => $courseid,
             'groupid' => $groupid,
             'assessorid' => $assessorid,
+            'modulekey' => $modulekey,
         ]);
         return true;
     }
@@ -97,11 +148,12 @@ class assessors_manager {
      * @param int $courseid
      * @return array<int, int>
      */
-    public static function get_group_assessor_map(int $courseid): array {
-        $assignment = self::get_normcontrol_assign($courseid);
+    public static function get_group_assessor_map(int $courseid, string $modulekey = 'normcontrol'): array {
+        $assignment = self::get_assign_by_module_key($courseid, $modulekey);
         if (!$assignment) {
-            self::log('Skipping assessor map build because normcontrol assignment was not found', [
+            self::log('Skipping assessor map build because assignment was not found', [
                 'courseid' => $courseid,
+                'modulekey' => $modulekey,
             ]);
             return [];
         }
@@ -129,6 +181,7 @@ class assessors_manager {
         self::log('Built group assessor map', [
             'courseid' => $courseid,
             'mapping' => $mapping,
+            'modulekey' => $modulekey,
         ]);
         return $mapping;
     }
@@ -140,36 +193,7 @@ class assessors_manager {
      * @return array<int, \stdClass>
      */
     public static function get_control_role_users(int $courseid): array {
-        global $DB;
-
-        $role = $DB->get_record('role', ['shortname' => 'control'], 'id', IGNORE_MISSING);
-        if (!$role) {
-            self::log('Role with shortname control was not found', [
-                'courseid' => $courseid,
-            ]);
-            return [];
-        }
-
-        $coursecontext = \context_course::instance($courseid);
-        $users = get_role_users(
-            $role->id,
-            $coursecontext,
-            false,
-            'u.id, u.firstname, u.lastname, u.middlename, u.alternatename, u.firstnamephonetic, u.lastnamephonetic, u.email',
-            'u.lastname ASC, u.firstname ASC'
-        );
-
-        foreach ($users as $userid => $user) {
-            if (!is_enrolled($coursecontext, $user, '', true)) {
-                unset($users[$userid]);
-            }
-        }
-
-        self::log('Resolved control role users', [
-            'courseid' => $courseid,
-            'userids' => array_keys($users),
-        ]);
-        return $users;
+        return self::get_role_users_by_shortname($courseid, 'control');
     }
 
     /**
@@ -181,33 +205,32 @@ class assessors_manager {
      */
     public static function render_assessors_form(int $cmid, int $courseid): string {
         $groups = groups_get_all_groups($courseid, 0, 0, 'g.*', 'name ASC');
-        $teachers = self::get_control_role_users($courseid);
-        $currentassessors = self::get_group_assessor_map($courseid);
+        $blockshtml = '';
+        $haseditableblocks = false;
+        foreach (self::get_assessor_sections() as $section) {
+            $modulekey = $section['modulekey'];
+            $roleshortname = $section['roleshortname'];
+            $title = get_string($section['titlestring'], 'mod_vkr');
 
-        $options = [0 => get_string('noassessor', 'mod_vkr')];
-        foreach ($teachers as $teacher) {
-            $options[$teacher->id] = fullname($teacher);
-        }
+            $blockshtml .= \html_writer::tag('h4', $title, ['class' => 'mt-4']);
 
-        $table = new \html_table();
-        $table->head = [
-            get_string('group', 'group'),
-            get_string('assessors', 'mod_vkr'),
-        ];
-        $table->attributes['class'] = 'generaltable';
+            if (!self::is_assessor_assignment_available($courseid, $modulekey)) {
+                $blockshtml .= \html_writer::div(
+                    get_string('assessorassignmentmissing', 'mod_vkr', $title),
+                    'alert alert-warning'
+                );
+                continue;
+            }
 
-        foreach ($groups as $group) {
-            $select = \html_writer::select(
-                $options,
-                'assessorid_' . $group->id,
-                $currentassessors[$group->id] ?? 0,
-                false
+            $haseditableblocks = true;
+            $teachers = self::get_role_users_by_shortname($courseid, $roleshortname);
+            $currentassessors = self::get_group_assessor_map($courseid, $modulekey);
+            $blockshtml .= self::render_assessor_block_table(
+                $groups,
+                $teachers,
+                $currentassessors,
+                $modulekey
             );
-
-            $table->data[] = [
-                format_string($group->name),
-                $select,
-            ];
         }
 
         $hidden = \html_writer::empty_tag('input', [
@@ -236,15 +259,61 @@ class assessors_manager {
             'class' => 'btn btn-primary',
             'value' => get_string('apply', 'mod_vkr'),
         ]);
+        $actions = $haseditableblocks ? \html_writer::div($submit, 'mt-3') : '';
 
         return \html_writer::start_tag('form', [
             'method' => 'post',
             'action' => (new \moodle_url('/mod/vkr/view.php'))->out(false),
         ]) .
             $hidden .
-            \html_writer::table($table) .
-            \html_writer::div($submit, 'mt-3') .
+            $blockshtml .
+            $actions .
             \html_writer::end_tag('form');
+    }
+
+    /**
+     * Render one assessor table block for assignment module key.
+     *
+     * @param array<int, \stdClass> $groups
+     * @param array<int, \stdClass> $teachers
+     * @param array<int, int> $currentassessors
+     * @param string $modulekey
+     * @return string
+     */
+    private static function render_assessor_block_table(
+        array $groups,
+        array $teachers,
+        array $currentassessors,
+        string $modulekey
+    ): string {
+        $options = [0 => get_string('noassessor', 'mod_vkr')];
+        foreach ($teachers as $teacher) {
+            $options[$teacher->id] = fullname($teacher);
+        }
+
+        $table = new \html_table();
+        $table->head = [
+            get_string('group', 'group'),
+            get_string('assessors', 'mod_vkr'),
+        ];
+        $table->attributes['class'] = 'generaltable';
+
+        foreach ($groups as $group) {
+            $fieldname = self::get_assessor_field_name($modulekey, (int)$group->id);
+            $select = \html_writer::select(
+                $options,
+                $fieldname,
+                $currentassessors[(int)$group->id] ?? 0,
+                false
+            );
+
+            $table->data[] = [
+                format_string($group->name),
+                $select,
+            ];
+        }
+
+        return \html_writer::table($table);
     }
 
     /**
@@ -446,43 +515,7 @@ class assessors_manager {
      * @return \assign|null
      */
     private static function get_normcontrol_assign(int $courseid): ?\assign {
-        global $CFG, $DB;
-
-        require_once($CFG->dirroot . '/mod/assign/locallib.php');
-
-        $cmidnumber = \local_vkr\course_builder::get_module_idnumber('normcontrol');
-        $record = $DB->get_record_sql(
-            "SELECT a.id, cm.id AS cmid
-               FROM {course_modules} cm
-               JOIN {modules} m ON m.id = cm.module
-               JOIN {assign} a ON a.id = cm.instance
-              WHERE cm.course = :courseid
-                AND m.name = :modname
-                AND cm.idnumber = :cmidnumber",
-            [
-                'courseid' => $courseid,
-                'modname' => 'assign',
-                'cmidnumber' => $cmidnumber,
-            ]
-        );
-
-        if (!$record) {
-            self::log('SQL did not find the normcontrol assignment', [
-                'courseid' => $courseid,
-            ]);
-            return null;
-        }
-
-        $course = get_course($courseid);
-        $cm = get_coursemodule_from_id('assign', $record->cmid, $courseid, false, MUST_EXIST);
-        $context = \context_module::instance($cm->id);
-
-        self::log('Resolved normcontrol assignment', [
-            'courseid' => $courseid,
-            'cmid' => (int)$cm->id,
-            'assignid' => (int)$record->id,
-        ]);
-        return new \assign($context, $cm, $course);
+        return self::get_assign_by_module_key($courseid, 'normcontrol');
     }
 
     /**
@@ -536,6 +569,49 @@ class assessors_manager {
         $context = \context_module::instance($cm->id);
 
         return new \assign($context, $cm, $course);
+    }
+
+    /**
+     * Get enrolled course users by role shortname.
+     *
+     * @param int $courseid
+     * @param string $roleshortname
+     * @return array<int, \stdClass>
+     */
+    private static function get_role_users_by_shortname(int $courseid, string $roleshortname): array {
+        global $DB;
+
+        $role = $DB->get_record('role', ['shortname' => $roleshortname], 'id', IGNORE_MISSING);
+        if (!$role) {
+            self::log('Role by shortname was not found', [
+                'courseid' => $courseid,
+                'roleshortname' => $roleshortname,
+            ]);
+            return [];
+        }
+
+        $coursecontext = \context_course::instance($courseid);
+        $users = get_role_users(
+            (int)$role->id,
+            $coursecontext,
+            false,
+            'u.id, u.firstname, u.lastname, u.middlename, u.alternatename, u.firstnamephonetic, u.lastnamephonetic, u.email',
+            'u.lastname ASC, u.firstname ASC'
+        );
+
+        foreach ($users as $userid => $user) {
+            if (!is_enrolled($coursecontext, $user, '', true)) {
+                unset($users[$userid]);
+            }
+        }
+
+        self::log('Resolved role users by shortname', [
+            'courseid' => $courseid,
+            'roleshortname' => $roleshortname,
+            'userids' => array_keys($users),
+        ]);
+
+        return $users;
     }
 
     /**

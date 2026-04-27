@@ -56,6 +56,9 @@ $string['error_courseyear'] = 'Select a year';
 //assessors
 $string['assessors'] = 'Assessors';
 $string['noassessor'] = 'No assessor';
+$string['assessorblock_normcontrol'] = 'Normcontrol';
+$string['assessorblock_review'] = 'Reviewer';
+$string['assessorassignmentmissing'] = 'Assignment "{$a}" is missing';
 $string['selectgroup'] = 'Select group';
 $string['selectassessor'] = 'Select assessor';
 $string['apply'] = 'Apply';
