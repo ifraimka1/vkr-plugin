@@ -101,9 +101,41 @@ class course_builder {
         return array_keys(self::get_existing_auto_modules($courseid));
     }
 
+    public static function get_module_due_dates(int $courseid): array {
+        global $DB;
+
+        access::require_gekmanager_in_course($courseid);
+
+        $result = [];
+        $existingmodules = self::get_existing_auto_modules($courseid);
+
+        foreach ($existingmodules as $modulekey => $items) {
+            if (empty($items)) {
+                continue;
+            }
+
+            $cmid = (int)$items[0]->cmid;
+            $duedate = $DB->get_field_sql(
+                "SELECT a.duedate
+                   FROM {course_modules} cm
+                   JOIN {modules} m ON m.id = cm.module
+                   JOIN {assign} a ON a.id = cm.instance
+                  WHERE cm.id = :cmid
+                    AND m.name = :modname",
+                ['cmid' => $cmid, 'modname' => 'assign']
+            );
+
+            if ($duedate !== false) {
+                $result[$modulekey] = (int)$duedate;
+            }
+        }
+
+        return $result;
+    }
+
     public static function prepare_course(
         int $courseid,
-        int $duedate,
+        array $moduleduedates,
         string $speciality,
         int $courseyear,
         ?array $selectedmodulekeys = null
@@ -118,7 +150,7 @@ class course_builder {
         self::enable_course_completion_tracking($courseid);
         self::set_course_name($courseid, $speciality, $courseyear);
         self::create_sections($courseid, $sectionnumber);
-        self::create_modules($courseid, ++$sectionnumber, $duedate, $selectedmodulekeys);
+        self::create_modules($courseid, ++$sectionnumber, $moduleduedates, $selectedmodulekeys);
         self::sync_gek_role_modules($courseid);
     }
 
@@ -185,7 +217,7 @@ class course_builder {
 
     public static function update_course(
         $courseid,
-        $duedate,
+        array $moduleduedates,
         array $selectedmodulekeys,
         ?string $speciality = null,
         ?int $courseyear = null
@@ -209,11 +241,14 @@ class course_builder {
             $shouldexist = array_key_exists($modulekey, $selectedmodules);
 
             if ($shouldexist) {
+                $duedate = self::get_module_due_date_value($moduleduedates, $modulekey);
+
                 if (empty($existingitems)) {
                     self::create_module($courseid, $sectionnumber, $duedate, $modulekey, $module);
                     continue;
                 }
 
+                self::update_module_due_date((int)$existingitems[0]->cmid, $duedate);
                 self::update_module_availability_by_dependencies($courseid, (int)$existingitems[0]->cmid, $module);
 
                 for ($i = 1; $i < count($existingitems); $i++) {
@@ -336,18 +371,24 @@ class course_builder {
         rebuild_course_cache($courseid, true);
     }
 
-    private static function create_modules($courseid, $sectionnumber, $duedate, ?array $selectedmodulekeys = null): void {
+    private static function create_modules(
+        $courseid,
+        $sectionnumber,
+        array $moduleduedates,
+        ?array $selectedmodulekeys = null
+    ): void {
         $modules = self::$defaultmodules;
         if ($selectedmodulekeys !== null) {
             $modules = array_intersect_key($modules, array_flip($selectedmodulekeys));
         }
 
         foreach ($modules as $modulekey => $module) {
+            $duedate = self::get_module_due_date_value($moduleduedates, $modulekey);
             self::create_module($courseid, $sectionnumber, $duedate, $modulekey, $module);
         }
     }
 
-    private static function create_module($courseid, $sectionnumber, $duedate, string $modulekey, array $module): void {
+    private static function create_module($courseid, $sectionnumber, int $duedate, string $modulekey, array $module): void {
         global $CFG;
         require_once($CFG->dirroot . '/mod/assign/lib.php');
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
@@ -396,6 +437,36 @@ class course_builder {
         $createdmodinfo = create_module($createdmodinfo);
 
         self::protect_cm($createdmodinfo->coursemodule);
+    }
+
+    private static function update_module_due_date(int $cmid, int $duedate): void {
+        global $DB;
+
+        $record = $DB->get_record_sql(
+            "SELECT cm.id AS cmid, cm.course, cm.instance, a.id AS assignid
+               FROM {course_modules} cm
+               JOIN {modules} m ON m.id = cm.module
+               JOIN {assign} a ON a.id = cm.instance
+              WHERE cm.id = :cmid
+                AND m.name = :modname",
+            ['cmid' => $cmid, 'modname' => 'assign']
+        );
+
+        if (!$record) {
+            return;
+        }
+
+        $assign = new \stdClass();
+        $assign->id = (int)$record->assignid;
+        $assign->duedate = $duedate;
+        $assign->timemodified = time();
+
+        $DB->update_record('assign', $assign);
+    }
+
+    private static function get_module_due_date_value(array $moduleduedates, string $modulekey): int {
+        $value = $moduleduedates[$modulekey] ?? time();
+        return max(0, (int)$value);
     }
 
     private static function get_modules_section_number($courseid): int|bool {

@@ -355,6 +355,7 @@ switch ($tab) {
     default:
         $availablemodules = \local_vkr\course_builder::get_default_modules();
         $selectedmodules = \local_vkr\course_builder::get_selected_module_keys($course->id);
+        $moduleduedates = \local_vkr\course_builder::get_module_due_dates($course->id);
         $specialityoptions = \local_vkr\course_builder::get_training_direction_options();
         $yearoptions = \local_vkr\course_builder::get_year_options();
         $selectednameconfig = \local_vkr\course_builder::get_selected_course_name_config($course->id);
@@ -371,6 +372,7 @@ switch ($tab) {
             'needtoprepare' => $needtoprepare,
             'availablemodules' => $availablemodules,
             'selectedmodules' => $selectedmodules,
+            'moduleduedates' => $moduleduedates,
             'specialityoptions' => $specialityoptions,
             'yearoptions' => $yearoptions,
             'selectedspeciality' => $selectednameconfig['speciality'],
@@ -379,17 +381,22 @@ switch ($tab) {
         $form = new \mod_vkr\form\main_form(null, $formdata);
         if ($data = $form->get_data()) {
             $selectedmodulekeys = [];
+            $moduleduedates = [];
             foreach (array_keys($availablemodules) as $modulekey) {
                 $fieldname = 'module_' . $modulekey;
+                $duedatefield = 'duedate_' . $modulekey;
                 if (!empty($data->{$fieldname})) {
                     $selectedmodulekeys[] = $modulekey;
+                    $moduleduedates[$modulekey] = isset($data->{$duedatefield})
+                        ? (int)$data->{$duedatefield}
+                        : time();
                 }
             }
 
             if (!empty($data->preparebtn)) {
                 \local_vkr\course_builder::prepare_course(
                     $course->id,
-                    $data->duedate,
+                    $moduleduedates,
                     $data->speciality,
                     (int)$data->courseyear,
                     $selectedmodulekeys
@@ -398,7 +405,7 @@ switch ($tab) {
             } else if (!empty($data->updatebtn)) {
                 \local_vkr\course_builder::update_course(
                     $course->id,
-                    $data->duedate,
+                    $moduleduedates,
                     $selectedmodulekeys,
                     $data->speciality,
                     (int)$data->courseyear

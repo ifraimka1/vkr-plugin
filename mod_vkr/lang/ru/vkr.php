@@ -45,6 +45,7 @@ $string['update_course'] = 'Обновить курс';
 $string['notification_coursereset'] = 'Курс успешно сброшен';
 $string['notification_courseupdated'] = 'Курс успешно обновлен';
 $string['duedate'] = 'Срок сдачи ВКР';
+$string['moduleduedate'] = 'Срок сдачи';
 
 //assessors
 $string['assessors'] = 'Оценщики';
@@ -71,6 +72,7 @@ $string['reviewers'] = 'Рецензенты';
 $string['notification_reviewerssaved'] = 'Назначения рецензентов успешно сохранены.';
 $string['notification_reviewerssaveerror'] = 'Ошибка при сохранении назначений рецензентов.';
 $string['notification_reviewermappingduplicate'] = 'Один студент может быть назначен только одному рецензенту.';
+$string['taskstogenerate'] = 'Задания для создания';
 
 $string['singleinstanceonly'] = 'В курсе может быть только один модуль ВКР';
 

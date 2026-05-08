@@ -41,20 +41,13 @@ class main_form extends moodleform {
         $yearoptions = $customdata['yearoptions'] ?? [];
         $selectedspeciality = $customdata['selectedspeciality'] ?? '';
         $selectedcourseyear = (int)($customdata['selectedcourseyear'] ?? date('Y'));
+        $moduleduedates = $customdata['moduleduedates'] ?? [];
 
         $mform->addElement('hidden', 'id', $customdata['cmid']);
         $mform->setType('id', PARAM_INT);
 
         $mform->addElement('hidden', 'sesskey', sesskey());
-        $mform->setType('id', PARAM_RAW);
-
-        $mform->addElement(
-            'date_selector',
-            'duedate',
-            get_string('duedate', 'mod_vkr'),
-            ['optional' => false]
-        );
-        $mform->setDefault('duedate', time());
+        $mform->setType('sesskey', PARAM_RAW);
 
         $mform->addElement(
             'select',
@@ -74,10 +67,19 @@ class main_form extends moodleform {
         $mform->setType('courseyear', PARAM_INT);
         $mform->setDefault('courseyear', $selectedcourseyear);
 
+        $mform->addElement('header', 'taskstogenerate', get_string('taskstogenerate', 'mod_vkr'));
         foreach ($availablemodules as $modulekey => $module) {
             $fieldname = 'module_' . $modulekey;
+            $duedatefield = 'duedate_' . $modulekey;
             $mform->addElement('advcheckbox', $fieldname, '', $module['name']);
             $mform->setDefault($fieldname, in_array($modulekey, $selectedmodules, true) ? 1 : 0);
+            $mform->addElement(
+                'date_selector',
+                $duedatefield,
+                get_string('moduleduedate', 'mod_vkr'),
+                ['optional' => false]
+            );
+            $mform->setDefault($duedatefield, $moduleduedates[$modulekey] ?? time());
         }
 
         if ($customdata['needtoprepare']) {
@@ -86,11 +88,13 @@ class main_form extends moodleform {
                 'preparebtn',
                 get_string('prepare_course', 'mod_vkr')
             );
+            $mform->closeHeaderBefore('preparebtn');
         } else {
             $buttonarray = [];
             $buttonarray[] = $mform->createElement('submit', 'updatebtn', get_string('update_course', 'mod_vkr'));
             $buttonarray[] = $mform->createElement('submit', 'resetbtn', get_string('reset_course', 'mod_vkr'));
             $mform->addGroup($buttonarray, 'courseactions', '', [' '], false);
+            $mform->closeHeaderBefore('courseactions');
         }
     }
 

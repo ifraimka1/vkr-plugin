@@ -45,6 +45,7 @@ $string['update_course'] = 'Update course';
 $string['notification_coursereset'] = 'Course reset successfully';
 $string['notification_courseupdated'] = 'Course updated successfully';
 $string['duedate'] = 'Deadline for assignments';
+$string['moduleduedate'] = 'Due date';
 $string['speciality'] = 'Training direction';
 $string['courseyear'] = 'Year';
 $string['select_option'] = 'Select...';
