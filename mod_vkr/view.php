@@ -25,6 +25,113 @@
 require(__DIR__.'/../../config.php');
 require_once(__DIR__.'/lib.php');
 require_once(__DIR__.'/classes/form/supervisors_form.php');
+require_once(__DIR__.'/classes/form/reviewer_form.php');
+
+/**
+ * Hide already selected students in other marker assignment autocompletes.
+ *
+ * @param string $selector
+ * @return void
+ */
+function mod_vkr_add_unique_student_select_js(string $selector): void {
+    global $PAGE;
+
+    $encodedselector = json_encode($selector, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
+    $PAGE->requires->js_init_code(<<<JS
+(function() {
+    const selector = {$encodedselector};
+    const selects = Array.from(document.querySelectorAll(selector));
+    if (!selects.length) {
+        return;
+    }
+
+    const masterOptionsBySelect = new Map();
+    selects.forEach(function(select) {
+        masterOptionsBySelect.set(
+            select,
+            Array.from(select.options).map(function(option) {
+                return {
+                    value: option.value,
+                    text: option.text
+                };
+            })
+        );
+    });
+
+    const syncOptions = function() {
+        const selectedByAny = new Set();
+
+        selects.forEach(function(select) {
+            const selected = Array.from(select.selectedOptions).map(function(option) {
+                return option.value;
+            }).filter(function(value) {
+                return value !== '';
+            });
+
+            Array.from(new Set(selected)).forEach(function(value) {
+                selectedByAny.add(value);
+            });
+        });
+
+        selects.forEach(function(select) {
+            const ownselected = new Set(
+                Array.from(select.selectedOptions).map(function(option) {
+                    return option.value;
+                })
+            );
+
+            const usedbyothers = new Set(
+                Array.from(selectedByAny).filter(function(value) {
+                    return !ownselected.has(value);
+                })
+            );
+
+            const masterOptions = masterOptionsBySelect.get(select) || [];
+            const selectedValues = Array.from(ownselected);
+
+            select.innerHTML = '';
+            masterOptions.forEach(function(optiondata) {
+                if (optiondata.value === '') {
+                    const emptyoption = new Option(optiondata.text, optiondata.value, false, false);
+                    select.add(emptyoption);
+                    return;
+                }
+
+                if (usedbyothers.has(optiondata.value)) {
+                    return;
+                }
+
+                const isselected = ownselected.has(optiondata.value);
+                const option = new Option(optiondata.text, optiondata.value, isselected, isselected);
+                select.add(option);
+            });
+
+            selectedValues.forEach(function(value) {
+                const option = Array.from(select.options).find(function(item) {
+                    return item.value === value;
+                });
+                if (option) {
+                    option.selected = true;
+                }
+            });
+
+            if (window.jQuery) {
+                window.jQuery(select).trigger('change.select2');
+            }
+        });
+    };
+
+    document.addEventListener('change', function(event) {
+        if (event.target && event.target.matches(selector)) {
+            syncOptions();
+        }
+    });
+
+    syncOptions();
+})();
+JS
+    );
+}
 
 // Course module id.
 $id = optional_param('id', 0, PARAM_INT);
@@ -65,6 +172,8 @@ $tabs = [
     new tabobject('main', new moodle_url('/mod/vkr/view.php', ['id' => $cm->id]), get_string('main', 'mod_vkr')),
 ];
 $supervisorsform = null;
+$reviewerform = null;
+$reviewassignmentavailable = false;
 
 if (!$needtoprepare) {
     $tabs[] = new tabobject(
@@ -76,6 +185,11 @@ if (!$needtoprepare) {
         'supervisors',
         new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'supervisors']),
         get_string('vkrsupervisors', 'mod_vkr')
+    );
+    $tabs[] = new tabobject(
+        'reviewer',
+        new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'reviewer']),
+        get_string('reviewer', 'mod_vkr')
     );
 }
 
@@ -172,100 +286,69 @@ switch ($tab) {
             redirect(new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'supervisors']));
         }
 
-        $PAGE->requires->js_init_code(<<<'JS'
-(function() {
-    const selector = "select[name^='supervisor_students_']";
-    const selects = Array.from(document.querySelectorAll(selector));
-    if (!selects.length) {
-        return;
-    }
+        mod_vkr_add_unique_student_select_js("select[name^='supervisor_students_']");
 
-    const masterOptionsBySelect = new Map();
-    selects.forEach(function(select) {
-        masterOptionsBySelect.set(
-            select,
-            Array.from(select.options).map(function(option) {
-                return {
-                    value: option.value,
-                    text: option.text
-                };
-            })
-        );
-    });
+        break;
 
-    const syncOptions = function() {
-        const selectedByAny = new Set();
-
-        selects.forEach(function(select) {
-            const selected = Array.from(select.selectedOptions).map(function(option) {
-                return option.value;
-            }).filter(function(value) {
-                return value !== '';
-            });
-
-            Array.from(new Set(selected)).forEach(function(value) {
-                selectedByAny.add(value);
-            });
-        });
-
-        selects.forEach(function(select) {
-            const ownselected = new Set(
-                Array.from(select.selectedOptions).map(function(option) {
-                    return option.value;
-                })
-            );
-
-            const usedbyothers = new Set(
-                Array.from(selectedByAny).filter(function(value) {
-                    return !ownselected.has(value);
-                })
-            );
-
-            const masterOptions = masterOptionsBySelect.get(select) || [];
-            const selectedValues = Array.from(ownselected);
-
-            select.innerHTML = '';
-            masterOptions.forEach(function(optiondata) {
-                if (optiondata.value === '') {
-                    const emptyoption = new Option(optiondata.text, optiondata.value, false, false);
-                    select.add(emptyoption);
-                    return;
-                }
-
-                if (usedbyothers.has(optiondata.value)) {
-                    return;
-                }
-
-                const isselected = ownselected.has(optiondata.value);
-                const option = new Option(optiondata.text, optiondata.value, isselected, isselected);
-                select.add(option);
-            });
-
-            selectedValues.forEach(function(value) {
-                const option = Array.from(select.options).find(function(item) {
-                    return item.value === value;
-                });
-                if (option) {
-                    option.selected = true;
-                }
-            });
-
-            if (window.jQuery) {
-                window.jQuery(select).trigger('change.select2');
+    case 'reviewer':
+        $reviewassignmentavailable = \mod_vkr\assessors_manager::is_assessor_assignment_available($course->id, 'review');
+        if (!$reviewassignmentavailable) {
+            if (optional_param('savereviewers', 0, PARAM_BOOL) && confirm_sesskey()) {
+                \core\notification::error(get_string('notification_reviewerssaveerror', 'mod_vkr'));
+                redirect(new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'reviewer']));
             }
-        });
-    };
-
-    document.addEventListener('change', function(event) {
-        if (event.target && event.target.matches(selector)) {
-            syncOptions();
+            break;
         }
-    });
 
-    syncOptions();
-})();
-JS
-        );
+        $reviewers = \mod_vkr\assessors_manager::get_reviewer_role_users($course->id);
+        $students = \mod_vkr\assessors_manager::get_student_role_users($course->id);
+        $currentmapping = \mod_vkr\assessors_manager::get_review_reviewer_map($course->id);
+        $reviewerform = new \mod_vkr\form\reviewer_form(null, [
+            'cmid' => $cm->id,
+            'reviewers' => $reviewers,
+            'students' => $students,
+            'currentmapping' => $currentmapping,
+            'assignmentavailable' => $reviewassignmentavailable,
+        ]);
+
+        if ($data = $reviewerform->get_data()) {
+            $selectedmap = [];
+            $studenttoreviewer = [];
+            $hasduplicates = false;
+
+            foreach ($reviewers as $reviewer) {
+                $fieldname = 'reviewer_students_' . (int)$reviewer->id;
+                $studentids = $data->{$fieldname} ?? [];
+                if (!is_array($studentids)) {
+                    $studentids = [$studentids];
+                }
+                $studentids = array_values(array_unique(array_filter(array_map('intval', $studentids))));
+                $selectedmap[(int)$reviewer->id] = $studentids;
+
+                foreach ($studentids as $studentid) {
+                    if (array_key_exists($studentid, $studenttoreviewer)) {
+                        $hasduplicates = true;
+                        break 2;
+                    }
+                    $studenttoreviewer[$studentid] = (int)$reviewer->id;
+                }
+            }
+
+            if ($hasduplicates) {
+                \core\notification::error(get_string('notification_reviewermappingduplicate', 'mod_vkr'));
+            } else {
+                $success = \mod_vkr\assessors_manager::assign_review_reviewers($course->id, $selectedmap);
+                if ($success) {
+                    \core\notification::success(get_string('notification_reviewerssaved', 'mod_vkr'));
+                } else {
+                    \core\notification::error(get_string('notification_reviewerssaveerror', 'mod_vkr'));
+                }
+            }
+
+            redirect(new moodle_url('/mod/vkr/view.php', ['id' => $cm->id, 'tab' => 'reviewer']));
+        }
+
+        mod_vkr_add_unique_student_select_js("select[name^='reviewer_students_']");
 
         break;
 
@@ -341,6 +424,14 @@ switch ($tab) {
     case 'supervisors':
         if ($supervisorsform !== null) {
             $supervisorsform->display();
+        }
+        break;
+
+    case 'reviewer':
+        if (!$reviewassignmentavailable) {
+            echo \html_writer::div(get_string('reviewassignmentmissing', 'mod_vkr'), 'alert alert-warning');
+        } else if ($reviewerform !== null) {
+            $reviewerform->display();
         }
         break;
 

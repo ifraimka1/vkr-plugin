@@ -38,11 +38,6 @@ class assessors_manager {
                 'roleshortname' => 'control',
                 'titlestring' => 'assessorblock_normcontrol',
             ],
-            [
-                'modulekey' => 'review',
-                'roleshortname' => 'recenzent',
-                'titlestring' => 'assessorblock_review',
-            ],
         ];
     }
 
@@ -331,6 +326,16 @@ class assessors_manager {
     }
 
     /**
+     * Get enrolled course users with role shortname "recenzent".
+     *
+     * @param int $courseid
+     * @return array<int, \stdClass>
+     */
+    public static function get_reviewer_role_users(int $courseid): array {
+        return self::get_role_users_by_shortname($courseid, 'recenzent');
+    }
+
+    /**
      * Get enrolled course users with role "student".
      *
      * @param int $courseid
@@ -369,6 +374,36 @@ class assessors_manager {
                 $mapping[$supervisorid] = [];
             }
             $mapping[$supervisorid][] = (int)$student->id;
+        }
+
+        return $mapping;
+    }
+
+    /**
+     * Get current reviewer => student ids mapping for "review" assignment.
+     *
+     * @param int $courseid
+     * @return array<int, array<int, int>>
+     */
+    public static function get_review_reviewer_map(int $courseid): array {
+        $assignment = self::get_review_assign($courseid);
+        if (!$assignment) {
+            return [];
+        }
+
+        $students = self::get_student_role_users($courseid);
+        $mapping = [];
+        foreach ($students as $student) {
+            $flags = $assignment->get_user_flags((int)$student->id, false);
+            $reviewerid = (int)($flags->allocatedmarker ?? 0);
+            if ($reviewerid <= 0) {
+                continue;
+            }
+
+            if (!array_key_exists($reviewerid, $mapping)) {
+                $mapping[$reviewerid] = [];
+            }
+            $mapping[$reviewerid][] = (int)$student->id;
         }
 
         return $mapping;
@@ -427,6 +462,63 @@ class assessors_manager {
         self::log('Updated advisor supervisor allocation', [
             'courseid' => $courseid,
             'pairs' => $studenttosupervisor,
+        ]);
+        return true;
+    }
+
+    /**
+     * Assign reviewers to students in "review" assignment using allocatedmarker.
+     *
+     * @param int $courseid
+     * @param array<int, array<int, int>> $reviewerstudentmap
+     * @return bool
+     */
+    public static function assign_review_reviewers(int $courseid, array $reviewerstudentmap): bool {
+        $assignment = self::get_review_assign($courseid);
+        if (!$assignment) {
+            self::log('review assignment was not found', ['courseid' => $courseid]);
+            return false;
+        }
+
+        $students = self::get_student_role_users($courseid);
+        $validstudentids = array_map(static function($student) {
+            return (int)$student->id;
+        }, array_values($students));
+        $validstudentids = array_flip($validstudentids);
+
+        $studenttoreviewer = [];
+        foreach ($reviewerstudentmap as $reviewerid => $studentids) {
+            $reviewerid = (int)$reviewerid;
+            if ($reviewerid <= 0) {
+                continue;
+            }
+
+            foreach ($studentids as $studentid) {
+                $studentid = (int)$studentid;
+                if (!array_key_exists($studentid, $validstudentids)) {
+                    continue;
+                }
+                $studenttoreviewer[$studentid] = $reviewerid;
+            }
+        }
+
+        foreach ($students as $student) {
+            $studentid = (int)$student->id;
+            $flags = $assignment->get_user_flags($studentid, true);
+            $flags->allocatedmarker = (int)($studenttoreviewer[$studentid] ?? 0);
+            if (!$assignment->update_user_flags($flags)) {
+                self::log('Failed to update review allocation', [
+                    'courseid' => $courseid,
+                    'studentid' => $studentid,
+                    'allocatedmarker' => (int)$flags->allocatedmarker,
+                ]);
+                return false;
+            }
+        }
+
+        self::log('Updated review reviewer allocation', [
+            'courseid' => $courseid,
+            'pairs' => $studenttoreviewer,
         ]);
         return true;
     }
@@ -526,6 +618,16 @@ class assessors_manager {
      */
     private static function get_advisor_assign(int $courseid): ?\assign {
         return self::get_assign_by_module_key($courseid, 'advisor');
+    }
+
+    /**
+     * Resolve the "review" assignment in the course.
+     *
+     * @param int $courseid
+     * @return \assign|null
+     */
+    private static function get_review_assign(int $courseid): ?\assign {
+        return self::get_assign_by_module_key($courseid, 'review');
     }
 
     /**

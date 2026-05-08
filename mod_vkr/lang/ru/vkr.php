@@ -66,9 +66,15 @@ $string['students'] = 'Студенты';
 $string['notification_supervisorssaved'] = 'Назначения руководителей ВКР успешно сохранены.';
 $string['notification_supervisorssaveerror'] = 'Ошибка при сохранении назначений руководителей ВКР.';
 $string['notification_supervisormappingduplicate'] = 'Один студент может быть назначен только одному руководителю ВКР.';
+$string['reviewer'] = 'Рецензент';
+$string['reviewers'] = 'Рецензенты';
+$string['notification_reviewerssaved'] = 'Назначения рецензентов успешно сохранены.';
+$string['notification_reviewerssaveerror'] = 'Ошибка при сохранении назначений рецензентов.';
+$string['notification_reviewermappingduplicate'] = 'Один студент может быть назначен только одному рецензенту.';
 
 $string['singleinstanceonly'] = 'В курсе может быть только один модуль ВКР';
 
 $string['assessorblock_normcontrol'] = 'Нормоконтроль';
 $string['assessorblock_review'] = 'Рецензент';
 $string['assessorassignmentmissing'] = 'Нет задания для назначения оценщиков';
+$string['reviewassignmentmissing'] = 'Нет задания для назначения рецензентов';
