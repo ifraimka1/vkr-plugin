@@ -71,14 +71,11 @@ class main_form extends moodleform {
         foreach ($availablemodules as $modulekey => $module) {
             $fieldname = 'module_' . $modulekey;
             $duedatefield = 'duedate_' . $modulekey;
-            $mform->addElement('advcheckbox', $fieldname, '', $module['name']);
+            $taskrow = [];
+            $taskrow[] = $mform->createElement('advcheckbox', $fieldname, '', $module['name']);
+            $taskrow[] = $mform->createElement('date_selector', $duedatefield, '', ['optional' => false]);
+            $mform->addGroup($taskrow, 'taskrow_' . $modulekey, '', '', false);
             $mform->setDefault($fieldname, in_array($modulekey, $selectedmodules, true) ? 1 : 0);
-            $mform->addElement(
-                'date_selector',
-                $duedatefield,
-                get_string('moduleduedate', 'mod_vkr'),
-                ['optional' => false]
-            );
             $mform->setDefault($duedatefield, $moduleduedates[$modulekey] ?? time());
         }
 

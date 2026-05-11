@@ -9,3 +9,68 @@
   background-color: #bb2d3b;
   border-color: #bb2d3b;
 }
+
+#fgroup_id_tasktableheader,
+.fitem_fgroup[id^="fgroup_id_taskrow_"] {
+  margin-bottom: .5rem;
+}
+
+#fgroup_id_tasktableheader .col-form-label,
+.fitem_fgroup[id^="fgroup_id_taskrow_"] .col-form-label {
+  display: none;
+}
+
+#fgroup_id_tasktableheader .felement,
+.fitem_fgroup[id^="fgroup_id_taskrow_"] .felement {
+  flex: 0 0 100%;
+  max-width: 100%;
+}
+
+#fgroup_id_tasktableheader fieldset,
+.fitem_fgroup[id^="fgroup_id_taskrow_"] fieldset {
+  margin: 0;
+  width: 100%;
+}
+
+#fgroup_id_tasktableheader fieldset > div,
+.fitem_fgroup[id^="fgroup_id_taskrow_"] fieldset > div {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) max-content;
+  column-gap: 1.5rem;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+}
+
+#fgroup_id_tasktableheader fieldset > div > *,
+.fitem_fgroup[id^="fgroup_id_taskrow_"] fieldset > div > * {
+  margin: 0;
+}
+
+#fgroup_id_tasktableheader fieldset > div > *:first-child,
+.fitem_fgroup[id^="fgroup_id_taskrow_"] fieldset > div > *:first-child {
+  grid-column: 1;
+  min-width: 0;
+}
+
+#fgroup_id_tasktableheader fieldset > div > *:nth-child(2),
+.fitem_fgroup[id^="fgroup_id_taskrow_"] fieldset > div > *:nth-child(2) {
+  grid-column: 2;
+  white-space: nowrap;
+}
+
+#fgroup_id_tasktableheader {
+  font-weight: 600;
+}
+
+.fitem_fgroup[id^="fgroup_id_taskrow_"] .fdate_selector {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: .25rem;
+}
+
+.fitem_fgroup[id^="fgroup_id_taskrow_"] .form-check,
+.fitem_fgroup[id^="fgroup_id_taskrow_"] .form-check-inline {
+  margin-bottom: 0;
+}
