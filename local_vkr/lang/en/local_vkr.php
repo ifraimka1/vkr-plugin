@@ -30,3 +30,5 @@ $string['cannotdeletemodule'] = 'Auto-generated module cannot be deleted';
 $string['cannotdeletesection'] = 'Auto-generated section cannot be deleted';
 $string['specialitys'] = 'Training directions';
 $string['specialitys_desc'] = 'One direction per line. These values are shown in the VKR course preparation form.';
+$string['instructionurl'] = 'Instruction URL';
+$string['instructionurl_desc'] = 'URL of the instruction link shown at the top of the VKR main tab. Leave empty to hide the link.';

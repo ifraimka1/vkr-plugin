@@ -27,4 +27,12 @@ if ($hassiteconfig) {
         '',
         PARAM_RAW_TRIMMED
     ));
+
+    $settings->add(new admin_setting_configtext(
+        'local_vkr/instructionurl',
+        get_string('instructionurl', 'local_vkr'),
+        get_string('instructionurl_desc', 'local_vkr'),
+        '',
+        PARAM_URL
+    ));
 }

@@ -37,6 +37,7 @@ $string['vkrname'] = 'Title';
 $string['vkrname_help'] = 'Enter the name for this VKR activity.';
 
 $string['main'] = 'Main';
+$string['viewinstruction'] = 'View instructions';
 $string['prepare_course'] = 'Prepare course';
 $string['prepare_course_help'] = 'Initialize course: create sections and default mods';
 $string['notification_courseprepared'] = 'Course prepared successfully';

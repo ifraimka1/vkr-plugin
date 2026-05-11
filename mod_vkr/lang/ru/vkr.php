@@ -38,6 +38,7 @@ $string['vkrname'] = 'Название';
 $string['vkrname_help'] = 'Введите название для модуля "Защита ВКР".';
 
 $string['main'] = 'Главная';
+$string['viewinstruction'] = 'Посмотреть инструкцию';
 $string['prepare_course'] = 'Подготовить курс';
 $string['prepare_course_help'] = 'Нажатие на кнопку создаст разделы для подготовки и защиты ВКР с необходимыми элементами';
 $string['notification_courseprepared'] = 'Курс успешно подготовлен';

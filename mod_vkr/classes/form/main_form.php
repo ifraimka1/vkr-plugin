@@ -42,6 +42,21 @@ class main_form extends moodleform {
         $selectedspeciality = $customdata['selectedspeciality'] ?? '';
         $selectedcourseyear = (int)($customdata['selectedcourseyear'] ?? date('Y'));
         $moduleduedates = $customdata['moduleduedates'] ?? [];
+        $instructionurl = trim((string)get_config('local_vkr', 'instructionurl'));
+
+        if ($instructionurl !== '') {
+            $mform->addElement(
+                'html',
+                \html_writer::div(
+                    \html_writer::link(
+                        new \moodle_url($instructionurl),
+                        get_string('viewinstruction', 'mod_vkr'),
+                        ['target' => '_blank', 'rel' => 'noopener noreferrer']
+                    ),
+                    'vkr-instruction-link'
+                )
+            );
+        }
 
         $mform->addElement('hidden', 'id', $customdata['cmid']);
         $mform->setType('id', PARAM_INT);
