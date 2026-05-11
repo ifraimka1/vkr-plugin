@@ -437,6 +437,33 @@ class course_builder {
         $createdmodinfo = create_module($createdmodinfo);
 
         self::protect_cm($createdmodinfo->coursemodule);
+
+        if ($modulekey === 'review') {
+            self::allow_recenzent_to_grade_assignment((int)$createdmodinfo->coursemodule);
+        }
+    }
+
+    /**
+     * Allow users with role shortname "recenzent" to grade only this assignment module.
+     *
+     * @param int $cmid Course module id of the assignment.
+     */
+    private static function allow_recenzent_to_grade_assignment(int $cmid): void {
+        global $DB;
+
+        $role = $DB->get_record('role', ['shortname' => 'recenzent'], 'id', IGNORE_MISSING);
+        if (!$role) {
+            debugging(
+                'local_vkr: role with shortname "recenzent" was not found; '
+                    . 'mod/assign:grade override was skipped for cmid ' . $cmid . '.',
+                DEBUG_DEVELOPER
+            );
+            return;
+        }
+
+        $context = \context_module::instance($cmid);
+        assign_capability('mod/assign:grade', CAP_ALLOW, (int)$role->id, $context->id, true);
+        accesslib_clear_all_caches(true);
     }
 
     private static function update_module_due_date(int $cmid, int $duedate): void {
