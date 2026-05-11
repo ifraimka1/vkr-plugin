@@ -33,6 +33,8 @@ class course_builder {
     private const PRESEDATEL_MODULE_IDNUMBER_PREFIX = 'vkr_predsedatel_';
     private const GEK_MEMBER_ROLE_SHORTNAME = 'gekmember';
     private const PRESEDATEL_ROLE_SHORTNAME = 'predsedatel';
+    private const DEFAULT_GRADE = 100;
+    private const DEFAULT_GRADE_PASS = 60;
 
     private static array $defaultsections = [
         [
@@ -223,6 +225,7 @@ class course_builder {
         ?int $courseyear = null
     ): void {
         access::require_gekmanager_in_course((int)$courseid);
+        self::enable_course_completion_tracking((int)$courseid);
 
         $sectionnumber = self::get_modules_section_number($courseid);
         if ($sectionnumber === false) {
@@ -249,7 +252,12 @@ class course_builder {
                 }
 
                 self::update_module_due_date((int)$existingitems[0]->cmid, $duedate);
+                self::update_module_completion_and_gradepass((int)$existingitems[0]->cmid);
                 self::update_module_availability_by_dependencies($courseid, (int)$existingitems[0]->cmid, $module);
+
+                if ($modulekey === 'review') {
+                    self::allow_recenzent_to_grade_assignment((int)$existingitems[0]->cmid);
+                }
 
                 for ($i = 1; $i < count($existingitems); $i++) {
                     course_delete_module($existingitems[$i]->cmid);
@@ -390,6 +398,7 @@ class course_builder {
 
     private static function create_module($courseid, $sectionnumber, int $duedate, string $modulekey, array $module): void {
         global $CFG;
+        require_once($CFG->dirroot . '/course/modlib.php');
         require_once($CFG->dirroot . '/mod/assign/lib.php');
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
@@ -398,7 +407,7 @@ class course_builder {
             $module['dependencies'] ?? []
         );
 
-        $createdmodinfo = (object)[
+        $createdmodinfo = self::apply_default_assign_settings((object)[
             'modulename' => 'assign',
             'section' => $sectionnumber,
             'course' => $courseid,
@@ -415,7 +424,6 @@ class course_builder {
             'sendlatenotifications' => 0,
             'duedate' => $duedate,
             'cutoffdate' => 0,
-            'grade' => 100,
             'gradingduedate' => 0,
             'teamsubmission' => 0,
             'requireallteammemberssubmit' => 0,
@@ -433,10 +441,125 @@ class course_builder {
             'assignsubmission_file_enabled' => 1,
             'assignsubmission_file_maxfiles' => 20,
             'assignsubmission_file_maxsizebytes' => 5242880,
-        ];
+        ]);
         $createdmodinfo = create_module($createdmodinfo);
 
         self::protect_cm($createdmodinfo->coursemodule);
+
+        if ($modulekey === 'review') {
+            self::allow_recenzent_to_grade_assignment((int)$createdmodinfo->coursemodule);
+        }
+    }
+
+    /**
+     * Allow users with role shortname "recenzent" to grade only this assignment module.
+     *
+     * @param int $cmid Course module id of the assignment.
+     */
+    private static function allow_recenzent_to_grade_assignment(int $cmid): void {
+        global $DB;
+
+        $role = $DB->get_record('role', ['shortname' => 'recenzent'], 'id', IGNORE_MISSING);
+        if (!$role) {
+            debugging(
+                'local_vkr: role with shortname "recenzent" was not found; '
+                    . 'mod/assign:grade override was skipped for cmid ' . $cmid . '.',
+                DEBUG_DEVELOPER
+            );
+            return;
+        }
+
+        $context = \context_module::instance($cmid);
+        assign_capability('mod/assign:grade', CAP_ALLOW, (int)$role->id, $context->id, true);
+        accesslib_clear_all_caches(true);
+    }
+
+    /**
+     * Apply common grade and completion settings to a generated assignment.
+     *
+     * @param \stdClass $moduleinfo Module info passed to create_module() or update_moduleinfo().
+     * @return \stdClass
+     */
+    private static function apply_default_assign_settings(\stdClass $moduleinfo): \stdClass {
+        global $CFG;
+
+        require_once($CFG->libdir . '/completionlib.php');
+
+        $moduleinfo->grade = self::DEFAULT_GRADE;
+        $moduleinfo->gradepass = self::DEFAULT_GRADE_PASS;
+        $moduleinfo->completion = COMPLETION_TRACKING_AUTOMATIC;
+        $moduleinfo->completionusegrade = 1;
+        $moduleinfo->completionpassgrade = 1;
+        $moduleinfo->completionview = 0;
+        $moduleinfo->completionexpected = 0;
+
+        return $moduleinfo;
+    }
+
+    /**
+     * Update grade pass and completion settings for an already existing assign module.
+     *
+     * @param int $cmid Course module id.
+     */
+    private static function update_module_completion_and_gradepass(int $cmid): void {
+        global $CFG, $DB;
+
+        require_once($CFG->dirroot . '/course/modlib.php');
+        require_once($CFG->libdir . '/completionlib.php');
+
+        $cm = $DB->get_record_sql(
+            "SELECT cm.*, m.name AS modname
+               FROM {course_modules} cm
+               JOIN {modules} m ON m.id = cm.module
+              WHERE cm.id = :cmid",
+            ['cmid' => $cmid]
+        );
+
+        if (!$cm || $cm->modname !== 'assign') {
+            return;
+        }
+
+        $assign = $DB->get_record('assign', ['id' => $cm->instance], '*', IGNORE_MISSING);
+        if (!$assign) {
+            return;
+        }
+
+        $moduleinfo = (object)[
+            'coursemodule' => (int)$cm->id,
+            'course' => (int)$cm->course,
+            'modulename' => 'assign',
+            'instance' => (int)$assign->id,
+            'name' => $assign->name,
+            'duedate' => (int)$assign->duedate,
+            'cmidnumber' => $cm->idnumber,
+            'availability' => $cm->availability,
+        ];
+        $moduleinfo = self::apply_default_assign_settings($moduleinfo);
+        update_moduleinfo($cm, $moduleinfo, (int)$cm->course);
+
+        $cmupdate = (object)[
+            'id' => (int)$cm->id,
+            'completion' => COMPLETION_TRACKING_AUTOMATIC,
+            'completionview' => 0,
+            'completionpassgrade' => 1,
+            'completionexpected' => 0,
+        ];
+        if (array_key_exists('completiongradeitemnumber', $DB->get_columns('course_modules'))) {
+            $cmupdate->completiongradeitemnumber = 0;
+        }
+        $DB->update_record('course_modules', $cmupdate);
+
+        $gradeitem = $DB->get_record('grade_items', [
+            'courseid' => (int)$cm->course,
+            'itemtype' => 'mod',
+            'itemmodule' => 'assign',
+            'iteminstance' => (int)$assign->id,
+        ], 'id, gradepass', IGNORE_MISSING);
+
+        if ($gradeitem && (float)$gradeitem->gradepass !== (float)self::DEFAULT_GRADE_PASS) {
+            $gradeitem->gradepass = self::DEFAULT_GRADE_PASS;
+            $DB->update_record('grade_items', $gradeitem);
+        }
     }
 
     private static function update_module_due_date(int $cmid, int $duedate): void {
@@ -543,7 +666,9 @@ class course_builder {
         if (!self::is_prepared($courseid) || !self::is_supported_gek_role($roleshortname)) {
             return;
         }
+        self::enable_course_completion_tracking($courseid);
 
+        require_once($CFG->dirroot . '/course/modlib.php');
         require_once($CFG->dirroot . '/mod/assign/lib.php');
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
@@ -562,7 +687,7 @@ class course_builder {
             $existingcm = reset($existingcms);
             $assign = $DB->get_record('assign', ['id' => $existingcm->instance], '*', MUST_EXIST);
 
-            $data = (object)[
+            $data = self::apply_default_assign_settings((object)[
                 'coursemodule' => $existingcm->id,
                 'course' => $courseid,
                 'modulename' => 'assign',
@@ -570,17 +695,19 @@ class course_builder {
                 'name' => $name,
                 'duedate' => 0,
                 'cmidnumber' => $idnumber,
-            ];
+            ]);
 
             update_moduleinfo($existingcm, $data, $courseid);
+            self::update_module_completion_and_gradepass((int)$existingcm->id);
 
             foreach (array_slice($existingcms, 1) as $duplicatecm) {
                 course_delete_module($duplicatecm->id);
             }
+            rebuild_course_cache($courseid, true);
             return;
         }
 
-        $createdmodinfo = (object)[
+        $createdmodinfo = self::apply_default_assign_settings((object)[
             'modulename' => 'assign',
             'section' => $sectionnumber,
             'course' => $courseid,
@@ -597,7 +724,6 @@ class course_builder {
             'sendlatenotifications' => 0,
             'duedate' => 0,
             'cutoffdate' => 0,
-            'grade' => 100,
             'gradingduedate' => 0,
             'teamsubmission' => 0,
             'requireallteammemberssubmit' => 0,
@@ -614,7 +740,7 @@ class course_builder {
             'assignsubmission_file_enabled' => 1,
             'assignsubmission_file_maxfiles' => 20,
             'assignsubmission_file_maxsizebytes' => 5242880,
-        ];
+        ]);
 
         $created = create_module($createdmodinfo);
         self::protect_cm($created->coursemodule);
