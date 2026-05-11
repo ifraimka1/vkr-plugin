@@ -34,7 +34,7 @@ class main_form extends moodleform {
         $mform = $this->_form;
         $customdata = $this->_customdata;
 
-        $needtoprepare = $customdata['needtoprepare'];
+        $needtoprepare = !empty($customdata['needtoprepare']);
         $availablemodules = $customdata['availablemodules'] ?? [];
         $selectedmodules = $customdata['selectedmodules'] ?? [];
         $specialityoptions = $customdata['specialityoptions'] ?? [];
@@ -79,7 +79,7 @@ class main_form extends moodleform {
             $mform->setDefault($duedatefield, $moduleduedates[$modulekey] ?? time());
         }
 
-        if ($customdata['needtoprepare']) {
+        if ($needtoprepare) {
             $mform->addElement(
                 'submit',
                 'preparebtn',

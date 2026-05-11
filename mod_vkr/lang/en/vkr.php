@@ -30,6 +30,7 @@ $string['pluginname'] = 'VKR';
 $string['pluginadministration'] = 'VKR administration';
 $string['modulename'] = 'VKR';
 $string['modulenameplural'] = 'VKR Activities';
+$string['novkrinstances'] = 'There are no VKR activities in this course';
 
 //mdl_form
 $string['vkrname'] = 'Title';

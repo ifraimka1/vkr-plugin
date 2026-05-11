@@ -53,7 +53,7 @@ echo $OUTPUT->heading($modulenameplural);
 $vkrs = get_all_instances_in_course('vkr', $course);
 
 if (empty($vkrs)) {
-    notice(get_string('no$vkrinstances', 'mod_vkr'), new moodle_url('/course/view.php', ['id' => $course->id]));
+    notice(get_string('novkrinstances', 'mod_vkr'), new moodle_url('/course/view.php', ['id' => $course->id]));
 }
 
 $table = new html_table();

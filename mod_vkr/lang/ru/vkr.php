@@ -31,6 +31,8 @@ $string['pluginadministration'] = 'Администрирование защит
 $string['modulename'] = 'Защита ВКР';
 $string['modulenameplural'] = 'Защиты ВКР';
 
+$string['novkrinstances'] = 'В этом курсе нет элементов «Защита ВКР».';
+
 //mdl_form
 $string['vkrname'] = 'Название';
 $string['vkrname_help'] = 'Введите название для модуля "Защита ВКР".';
